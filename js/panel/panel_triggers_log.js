@@ -21,12 +21,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             let html = '';
-            logs.forEach(log => {
+            logs.forEach((log, idx) => {
                 const isSuccess = log.status === 'SUCCESS' || log.status === 'STARTED';
                 const statusColor = isSuccess ? '#34d399' : '#f87171';
-                
+
+                // ✅ CSP FIX: No inline onmouseover/onmouseout — use data attribute + addEventListener below
                 html += `
-                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s; cursor: default;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                  <tr data-log-row="${idx}" style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s; cursor: default;">
                     <td style="padding: 10px; font-weight: 700; color: #60a5fa;">#${log.run}</td>
                     <td style="padding: 10px; color: #d1d5db; font-size: 11px;">⏰ ${log.time}</td>
                     <td style="padding: 10px; text-align: right; font-weight: 600; font-size: 11px; color: ${statusColor};">
@@ -37,6 +38,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             scheduleLogEntries.innerHTML = html;
+
+            // ✅ CSP FIX: Attach hover effects via JS after DOM insert (not inline attributes)
+            scheduleLogEntries.querySelectorAll('tr[data-log-row]').forEach(row => {
+                row.addEventListener('mouseover', () => { row.style.background = 'rgba(255,255,255,0.05)'; });
+                row.addEventListener('mouseout',  () => { row.style.background = 'transparent'; });
+            });
+
         });
     };
 

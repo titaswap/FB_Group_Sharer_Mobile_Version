@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "User-Agent", "operation": "set", "value": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "googlebot_sharer_fetch=1",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
+]

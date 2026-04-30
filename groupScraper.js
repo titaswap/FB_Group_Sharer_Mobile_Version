@@ -21,9 +21,12 @@ function extractGroupsFromDOM() {
     
     // Find all checkboxes or things acting like checkboxes
     const checkboxes = document.querySelectorAll('input[type="checkbox"], [role="checkbox"], [aria-checked]');
+    const nameOccurrences = {}; // track occurrences for duplicates
     
     checkboxes.forEach((box, index) => {
         let nameContent = '';
+        let groupUrl = null;
+        let groupId = null;
 
         // Traverse up to find a container with substantial text
         // Usually, a checkbox is inside a row with the group name spanning next to it.
@@ -71,15 +74,33 @@ function extractGroupsFromDOM() {
         // Clean up text
         nameContent = nameContent.replace(/Not checked|Checked|Select|Unselect/gi, '').trim();
 
-        // Push valid names without duplicates
+        // Push valid names without deduplication to preserve order and duplicates
         if (nameContent && nameContent.length > 0) {
-            if (!groups.find(g => g.name === nameContent)) {
-                groups.push({
-                    id: `group_${index}`,
-                    name: nameContent,
-                    checked: !!box.checked || box.getAttribute('aria-checked') === 'true'
-                });
+            
+            // Try to find a link nearby to extract URL and ID
+            const row = box.closest('div[role="row"]') || box.closest('div.x1i10hfl') || box.parentElement?.parentElement;
+            if (row) {
+                const link = row.querySelector('a[href*="/groups/"]');
+                if (link) {
+                    groupUrl = link.href.split('?')[0]; // clean up query params
+                    const match = groupUrl.match(/\/groups\/([^/]+)/);
+                    if (match) {
+                        groupId = match[1];
+                    }
+                }
             }
+
+            // Track occurrence
+            nameOccurrences[nameContent] = (nameOccurrences[nameContent] || 0) + 1;
+            const occurrenceIndex = nameOccurrences[nameContent] - 1;
+
+            groups.push({
+                id: groupId || `group_occurrence_${index}`,
+                url: groupUrl,
+                name: nameContent,
+                occurrenceIndex: occurrenceIndex,
+                checked: !!box.checked || box.getAttribute('aria-checked') === 'true'
+            });
         }
     });
 

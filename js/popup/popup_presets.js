@@ -68,7 +68,7 @@ function renderPresetsManager() {
             <span>📅 ${createdDate}</span>
           </div>
           <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">
-            ${preset.groups.slice(0, 5).map(g => `<span style="background:#e7f3ff; border:1px solid #cbe4fd; color:#1877f2; padding:3px 8px; border-radius:10px; font-size:11px; font-weight:500;">${g}</span>`).join('')}
+            ${preset.groups.slice(0, 5).map(g => `<span style="background:#e7f3ff; border:1px solid #cbe4fd; color:#1877f2; padding:3px 8px; border-radius:10px; font-size:11px; font-weight:500;">${groupDisplayName(g)}</span>`).join('')}
             ${preset.groups.length > 5 ? `<span style="color:#65676b; background:#f0f2f5; font-size:11px; padding:3px 8px; border-radius:10px;">+${preset.groups.length - 5} more</span>` : ''}
           </div>
         </div>`;
@@ -94,11 +94,36 @@ function renderPresetsManager() {
               popupRenderGroups(response.groups);
               // Pre-select groups from preset
               setTimeout(() => {
+                const normalizedGroups = preset.groups.map(normalizeGroupEntry);
+                document.querySelectorAll('.group-checkbox').forEach(cb => cb.checked = false);
+
+                const matchedIndexes = new Set();
+                const domNameOccurrences = {};
+
                 document.querySelectorAll('.group-checkbox').forEach(cb => {
-                  const label = cb.nextElementSibling;
-                  if (label && preset.groups.includes(label.textContent)) {
-                    cb.checked = true;
-                  }
+                    let cbGroup = {};
+                    try { cbGroup = JSON.parse(cb.dataset.groupObj); } catch(e) {}
+                    const nameContent = cbGroup.name || cb.nextElementSibling?.textContent.trim() || '';
+
+                    domNameOccurrences[nameContent] = (domNameOccurrences[nameContent] || 0) + 1;
+
+                    let matchedSavedIndex = -1;
+                    for (let j = 0; j < normalizedGroups.length; j++) {
+                        if (matchedIndexes.has(j)) continue;
+                        const saved = normalizedGroups[j];
+
+                        if (saved.id && cbGroup.id && !String(saved.id).startsWith('group_occurrence_') && !String(cbGroup.id).startsWith('group_occurrence_') && saved.id === cbGroup.id) { matchedSavedIndex = j; break; }
+                        if (saved.url && cbGroup.url && saved.url === cbGroup.url) { matchedSavedIndex = j; break; }
+
+                        if (saved.name === nameContent && (saved.occurrenceIndex === undefined || saved.occurrenceIndex === cbGroup.occurrenceIndex)) {
+                            matchedSavedIndex = j; break;
+                        }
+                    }
+
+                    if (matchedSavedIndex !== -1) {
+                        matchedIndexes.add(matchedSavedIndex);
+                        cb.checked = true;
+                    }
                 });
                 popupUpdateGroupCount(response.groups.length);
                 popupUpdateToggleChosenBtn();
@@ -140,15 +165,16 @@ function openSavePresetModal(groups, skipQuestion = false) {
   const presetFormView = document.getElementById('preset-form-view');
 
   popupPendingPresetGroups = groups;
+  const presetGroupLabels = groups.map(groupDisplayName);
   if (presetGroupsCountQuestion) presetGroupsCountQuestion.textContent = `${groups.length} groups selected`;
   if (presetGroupsListQuestion) {
-    presetGroupsListQuestion.innerHTML = groups.slice(0, 8).map(g =>
+    presetGroupsListQuestion.innerHTML = presetGroupLabels.slice(0, 8).map(g =>
       `<div style="padding:3px 0; color:rgba(255,255,255,0.8); font-size:12px;">• ${g}</div>`
     ).join('') + (groups.length > 8 ? `<div style="color:rgba(255,255,255,0.5); font-size:11px;">... and ${groups.length - 8} more</div>` : '');
   }
   if (presetGroupsCount) presetGroupsCount.textContent = `${groups.length} groups selected`;
   if (presetGroupsList) {
-    presetGroupsList.innerHTML = groups.slice(0, 8).map(g =>
+    presetGroupsList.innerHTML = presetGroupLabels.slice(0, 8).map(g =>
       `<div style="padding:3px 0; color:rgba(255,255,255,0.8); font-size:12px;">• ${g}</div>`
     ).join('') + (groups.length > 8 ? `<div style="color:rgba(255,255,255,0.5); font-size:11px;">... and ${groups.length - 8} more</div>` : '');
   }
@@ -162,7 +188,7 @@ function openSavePresetModal(groups, skipQuestion = false) {
     if (presetQuestionView) presetQuestionView.classList.remove('hidden');
     if (presetFormView) presetFormView.classList.add('hidden');
   }
-  
+
   if (savePresetModal) savePresetModal.classList.remove('hidden');
 }
 
@@ -376,10 +402,10 @@ function initPopupPresetsUI() {
         const link = links[i];
         if (summaryText) summaryText.textContent = `Extracting ${i+1}/${links.length}...`;
         const title = await popupFetchFacebookTitle(link);
-        
+
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-        
+
         const tdLink = document.createElement('td');
         tdLink.style.padding = '8px 10px';
         tdLink.style.fontSize = '11px';
@@ -388,7 +414,7 @@ function initPopupPresetsUI() {
         tdLink.style.textOverflow = 'ellipsis';
         tdLink.style.whiteSpace = 'nowrap';
         tdLink.style.color = 'rgba(255,255,255,0.6)';
-        
+
         try {
           const urlObj = new URL(link);
           const parts = urlObj.pathname.split('/').filter(Boolean);
@@ -401,7 +427,7 @@ function initPopupPresetsUI() {
 
         const tdName = document.createElement('td');
         tdName.style.padding = '6px 10px';
-        
+
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'extracted-group-name-input';
@@ -413,7 +439,7 @@ function initPopupPresetsUI() {
         input.style.padding = '5px 8px';
         input.style.fontSize = '12px';
         input.style.boxSizing = 'border-box';
-        
+
         if (title) {
           input.value = title;
           input.style.borderColor = 'rgba(74,222,128,0.4)';
@@ -424,7 +450,7 @@ function initPopupPresetsUI() {
           input.style.borderColor = 'rgba(248,113,113,0.6)';
           failedCount++;
         }
-        
+
         tdName.appendChild(input);
         tr.appendChild(tdLink);
         tr.appendChild(tdName);
@@ -434,7 +460,7 @@ function initPopupPresetsUI() {
       if (summaryText) {
         summaryText.innerHTML = `<span style="color:#4ade80">✅ ${successCount}</span> | <span style="color:#f87171">❌ ${failedCount}</span>`;
       }
-      
+
       presetScrapedNamesContainer.classList.remove('hidden');
       fetchPresetLinksBtn.textContent = '✨ Extract Group Names';
       fetchPresetLinksBtn.disabled = false;
@@ -445,7 +471,7 @@ function initPopupPresetsUI() {
     saveLinkPresetBtn.addEventListener('click', () => {
       const selectedAction = linkPresetSelect ? linkPresetSelect.value : 'new_preset';
       const presetName = linkPresetNameInput ? linkPresetNameInput.value.trim() : '';
-      
+
       if (selectedAction === 'new_preset' && !presetName) {
         alert('Please enter a name for your new preset.');
         return;
@@ -465,7 +491,7 @@ function initPopupPresetsUI() {
 
       chrome.storage.local.get(['groupPresets'], (result) => {
         let presets = result.groupPresets || [];
-        
+
         if (selectedAction === 'new_preset') {
           // Create new preset
           const newPreset = {
@@ -482,15 +508,14 @@ function initPopupPresetsUI() {
           presets = presets.map(p => {
             if (p.id === selectedAction) {
               updatedName = p.name;
-              // Append new groups and remove duplicates
-              const combinedGroups = [...p.groups, ...finalGroups];
-              p.groups = [...new Set(combinedGroups)];
+              // Append new groups (allow duplicates)
+              p.groups = [...p.groups, ...finalGroups];
             }
             return p;
           });
           saveAndNotify(`✅ Added ${finalGroups.length} new groups to "${updatedName}"!`);
         }
-        
+
         function saveAndNotify(msg) {
           chrome.storage.local.set({ groupPresets: presets }, () => {
             alert(msg);

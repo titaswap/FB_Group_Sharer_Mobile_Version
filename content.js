@@ -3,6 +3,49 @@ console.log('✅ [CT-INIT] content.js loaded!');
 // GLOBAL STOP FLAG - shared across all async functions
 let ct_automation_cancelled = false;
 
+// ─── PAGE RENDER HEALTH CHECK ────────────────────────────────────────────────
+// Internet slow হলে বা Facebook নিজে render না করলে এই function সেটা detect করে
+function isPageProperlyRendered() {
+    // 1. Facebook-এর core DOM elements আছে কিনা
+    const hasFBContent = !!(  
+        document.querySelector('#screen-root') ||
+        document.querySelector('[data-pagelet]') ||
+        document.querySelector('[data-mcomponent]') ||
+        document.querySelector('[role="main"]') ||
+        document.querySelector('[role="feed"]') ||
+        document.querySelector('[role="article"]') ||
+        (document.querySelector('#root') && document.querySelector('#root').children.length > 0)
+    );
+
+    // 2. Error page কিনা check করো ("Something went wrong", "Not Found" ইত্যাদি)
+    const bodyText = (document.body?.innerText || '').toLowerCase();
+    const isErrorPage =
+        bodyText.includes('something went wrong') ||
+        bodyText.includes('কিছু একটা সমস্যা') ||
+        bodyText.includes("this page isn't available") ||
+        bodyText.includes('page not found') ||
+        bodyText.includes('ত্রুটি') ||
+        (document.title && (
+            document.title.toLowerCase().includes('error') ||
+            document.title.toLowerCase().includes('not found') ||
+            document.title === ''
+        ));
+
+    // 3. Page একদম blank কিনা (body-তে 3-এর কম children = render হয়নি)
+    const isBlank = !document.body || document.body.children.length < 3;
+
+    // 4. Known error element আছে কিনা
+    const hasErrorEl = !!document.querySelector(
+        '[data-testid="error_page"], [class*="error-page"]'
+    );
+
+    const result = hasFBContent && !isErrorPage && !isBlank && !hasErrorEl;
+    if (!result) {
+        console.warn(`[CT-RENDER-CHECK] hasFBContent:${hasFBContent}, isErrorPage:${isErrorPage}, isBlank:${isBlank}, hasErrorEl:${hasErrorEl}`);
+    }
+    return result;
+}
+
 // ─── FLOATING STOP BUTTON ────────────────────────────────────────────────────
 // Injected into the FB page so user can stop automation without going to panel.
 function buildFloatingStopBtn() {
@@ -320,34 +363,84 @@ function safeClick(el) {
 function findPrimaryShareButton() {
     console.log('🔍 [CT-FIND] Searching for primary Share button...');
 
-    // Strategy 1: aria-label
-    const selectors = ['div[aria-label*="share"]', 'div[aria-label*="শেয়ার"]', 'a[aria-label*="share"]', 'a[aria-label*="শেয়ার"]'];
+    // Strategy 1: aria-label (expanded — includes English + Bangla + case variations)
+    const selectors = [
+        'div[aria-label*="share" i]',
+        'div[aria-label*="শেয়ার"]',
+        'a[aria-label*="share" i]',
+        'a[aria-label*="শেয়ার"]',
+        '[role="button"][aria-label*="share" i]',
+        '[role="button"][aria-label*="শেয়ার"]',
+    ];
     for (let sel of selectors) {
-        const found = document.querySelector(sel);
-        if (found) {
-            const r = found.getBoundingClientRect();
-            if (r.width > 2 && r.height > 2) {
-                console.log(`✅ [CT-FIND-S1] Found via aria-label selector: "${sel}"`);
-                return found;
+        try {
+            const found = document.querySelector(sel);
+            if (found) {
+                const r = found.getBoundingClientRect();
+                if (r.width > 2 && r.height > 2) {
+                    console.log(`✅ [CT-FIND-S1] Found via aria-label selector: "${sel}"`);
+                    return found;
+                }
+            }
+        } catch(e) { /* :has() or unsupported selector — skip */ }
+    }
+
+    // Strategy 2: fixed-bottom row — try all positions 0..4
+    const ssrBtns = document.querySelectorAll('#screen-root div.m.fixed-container.bottom [role="button"]');
+    if (ssrBtns.length >= 3) {
+        // Position 2 (3rd button) is usually Share on mobile FB photo page
+        console.log('✅ [CT-FIND-S2] Found via fixed-bottom 3rd button.');
+        return ssrBtns[2];
+    }
+    if (ssrBtns.length > 0) {
+        // Fallback: scan all bottom buttons for share-related content
+        for (const btn of ssrBtns) {
+            const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const txt   = (btn.innerText || '').toLowerCase();
+            if (label.includes('share') || label.includes('শেয়ার') ||
+                txt.includes('share')   || txt.includes('শেয়ার')) {
+                console.log('✅ [CT-FIND-S2b] Found bottom button with share text:', label || txt);
+                return btn;
             }
         }
     }
 
-    // Strategy 2: fixed-bottom row 3rd button
-    const ssrBtns = document.querySelectorAll('#screen-root div.m.fixed-container.bottom [role="button"]');
-    if (ssrBtns.length >= 3) {
-        console.log('✅ [CT-FIND-S2] Found via fixed-bottom 3rd button.');
-        return ssrBtns[2];
-    }
-
-    // Strategy 3: data-action-id="10"
+    // Strategy 3: data-action-id="10" (mobile FB share action)
     const actionIdTen = document.querySelector('div[data-action-id="10"]');
     if (actionIdTen) {
         console.log('✅ [CT-FIND-S3] Found via data-action-id="10".');
         return actionIdTen;
     }
 
-    // Strategy 4: container scan
+    // Strategy 3b: any button with data-action-id 8–12 (share/reaction row)
+    for (let aid = 8; aid <= 12; aid++) {
+        const el = document.querySelector(`[data-action-id="${aid}"]`);
+        if (el) {
+            const label = (el.getAttribute('aria-label') || '').toLowerCase();
+            const txt   = (el.innerText || '').toLowerCase();
+            if (label.includes('share') || label.includes('শেয়ার') ||
+                txt.includes('share')   || txt.includes('শেয়ার')) {
+                console.log(`✅ [CT-FIND-S3b] Found via data-action-id="${aid}" with share text.`);
+                return el;
+            }
+        }
+    }
+
+    // Strategy 4: Text-based scan — find any visible button/div with "Share" text
+    const allBtns = document.querySelectorAll('[role="button"]');
+    for (const btn of allBtns) {
+        const rect = btn.getBoundingClientRect();
+        if (rect.width < 5 || rect.height < 5) continue; // hidden
+        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+        const txt   = (btn.innerText || '').toLowerCase().trim();
+        if (label.includes('share') || label.includes('শেয়ার') ||
+            txt === 'share'         || txt === 'শেয়ার') {
+            console.log('✅ [CT-FIND-S4] Found via text/aria scan:', label || txt);
+            return btn;
+        }
+    }
+
+    // Strategy 5: container scan (original S4) — 3+ buttons group, 3rd is share
     const containers = document.querySelectorAll('div');
     for (const g of containers) {
         const btns = Array.from(g.children).filter(c =>
@@ -359,7 +452,7 @@ function findPrimaryShareButton() {
             const rect = target.getBoundingClientRect();
             if (rect.width > 5 && rect.height > 5 &&
                 (target.innerText.match(/\d+/) || target.innerHTML.includes('svg') || target.innerHTML.includes('path'))) {
-                console.log('✅ [CT-FIND-S4] Found via container scan.');
+                console.log('✅ [CT-FIND-S5] Found via container scan.');
                 return target;
             }
         }
@@ -453,6 +546,57 @@ if (typeof chrome !== 'undefined' && chrome.storage?.local) {
             console.log('⛔ [CT-ENTRY] Cancelled during stabilization. Exit.');
             return;
         }
+
+        // ── PAGE RENDER VERIFICATION ──────────────────────────────────────────
+        // Internet slow বা Facebook render না করলে এখানে detect হবে।
+        // প্রতি 5s অপেক্ষা করে, 4 বার চেষ্টার পরও fail হলে batch reload করে।
+        {
+            let renderOk = false;
+            const MAX_RENDER_ATTEMPTS = 4;
+
+            for (let renderAttempt = 1; renderAttempt <= MAX_RENDER_ATTEMPTS; renderAttempt++) {
+                if (ct_automation_cancelled) return;
+
+                renderOk = isPageProperlyRendered();
+                if (renderOk) {
+                    console.log(`✅ [CT-RENDER] Page rendered OK (attempt ${renderAttempt}).`);
+                    break;
+                }
+
+                console.warn(`⚠️ [CT-RENDER] Page not rendered yet (attempt ${renderAttempt}/${MAX_RENDER_ATTEMPTS}). Waiting 5s...`);
+                chrome.runtime.sendMessage({
+                    type: 'progress_log',
+                    hint: `Waiting for page to load... (${renderAttempt}/${MAX_RENDER_ATTEMPTS})`
+                });
+                // Browser window focus করো — Facebook tab foreground-এ থাকলে render দ্রুত হয়
+                chrome.runtime.sendMessage({ action: 'FOCUS_FB_WINDOW', reason: 'page_not_rendered' });
+
+                try {
+                    await sleep(5, 5, `Page Loading (${renderAttempt}/${MAX_RENDER_ATTEMPTS})`);
+                } catch(e) {
+                    console.log('⛔ [CT-RENDER] Cancelled during render wait. Exit.');
+                    return;
+                }
+            }
+
+            if (!renderOk) {
+                console.error(`❌ [CT-RENDER] Page failed to render after ${MAX_RENDER_ATTEMPTS} attempts.`);
+                console.error('❌ [CT-RENDER] Possible causes: slow internet, Facebook error page, blank screen.');
+
+                // Panel-কে জানাও → panel পুরো batch reload করবে (batch_retry_requested)
+                chrome.runtime.sendMessage({
+                    type: 'batch_retry_requested',
+                    reason: 'page_render_failed'
+                });
+                chrome.storage.local.set({
+                    is_automation_running: false,
+                    auto_trigger_share: false
+                });
+                chrome.runtime.sendMessage({ type: 'status_update', running: false });
+                return; // Exit — panel handles the retry
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         let attemptsToFindDialog = 0;
 

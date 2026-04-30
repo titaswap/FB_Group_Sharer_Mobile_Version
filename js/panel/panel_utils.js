@@ -15,17 +15,36 @@ function getTargetTabId() {
   return params.get('tabId') ? parseInt(params.get('tabId')) : null;
 }
 
-// Smart Tab Selector (Existing FB Tab > Create New)
+/**
+ * safeTabExists — silently checks if a tab is alive.
+ * Always consumes chrome.runtime.lastError to prevent "Unchecked runtime.lastError" errors.
+ */
+function safeTabExists(tabId, cb) {
+    if (!tabId) { cb(false); return; }
+    chrome.tabs.get(tabId, (tab) => {
+        // MUST read lastError to suppress "Unchecked runtime.lastError" in console
+        const err = chrome.runtime.lastError;
+        cb(!err && !!tab && tab.status !== 'unloaded');
+    });
+}
+
+/**
+ * provideActiveTab — Smart Tab Selector
+ * Priority: URL param tabId (if still alive) → Any live Facebook tab → Create new tab
+ * NEVER throws "No tab with id" errors because safeTabExists handles all edge cases.
+ */
 function provideActiveTab(callback) {
     const paramId = getTargetTabId();
-    
+
     const findFBTabs = () => {
         chrome.tabs.query({ url: "*://*.facebook.com/*" }, (tabs) => {
-            if (tabs.length > 0) {
-                callback(tabs[0].id);
+            // Filter to tabs that are actually loaded (not crashed/unloaded)
+            const liveTabs = tabs.filter(t => t.status !== 'unloaded');
+            if (liveTabs.length > 0) {
+                callback(liveTabs[0].id);
             } else {
-                // No FB tab found, create a new one
-                const defaultUrl = document.getElementById('post-link-to-visit') ? document.getElementById('post-link-to-visit').value.trim() : "https://www.facebook.com";
+                // No FB tab found — create a fresh one
+                const defaultUrl = (document.getElementById('post-link-to-visit') || {}).value?.trim() || 'https://www.facebook.com';
                 chrome.tabs.create({ url: defaultUrl }, (newTab) => {
                     callback(newTab.id);
                 });
@@ -34,11 +53,14 @@ function provideActiveTab(callback) {
     };
 
     if (paramId) {
-        chrome.tabs.get(paramId, (tab) => {
-            if (chrome.runtime.lastError || !tab) {
-                findFBTabs();
-            } else {
+        // Validate the stored tabId before using it
+        safeTabExists(paramId, (alive) => {
+            if (alive) {
                 callback(paramId);
+            } else {
+                // URL tabId is stale (tab was closed) — find a live FB tab
+                console.warn(`[provideActiveTab] Tab ${paramId} no longer exists. Falling back to live FB tab.`);
+                findFBTabs();
             }
         });
     } else {
@@ -173,12 +195,24 @@ function updateSchedulePreview() {
   const type = intervalType.value;
   const val = intervalValue.value || 0;
   
+  const isRandom = document.getElementById('schedule-randomize')?.checked || false;
+  const maxContainer = document.getElementById('schedule-interval-max-container');
+  const maxVal = document.getElementById('schedule-interval-max-value')?.value || val;
+  
+  if (maxContainer) {
+    maxContainer.style.display = isRandom ? 'flex' : 'none';
+  }
+  
   intervalLabel.textContent = `${type.toUpperCase()} BETWEEN TRIGGERS`;
   const labelSingular = type.slice(0, -1);
   
-  if (val == 1) {
-      previewText.textContent = `🔄 Every ${labelSingular}`;
+  if (isRandom) {
+      previewText.textContent = `🔄 Every ${val} to ${maxVal} ${type}`;
   } else {
-      previewText.textContent = `🔄 Every ${val} ${type}`;
+      if (val == 1) {
+          previewText.textContent = `🔄 Every ${labelSingular}`;
+      } else {
+          previewText.textContent = `🔄 Every ${val} ${type}`;
+      }
   }
 }

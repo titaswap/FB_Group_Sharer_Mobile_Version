@@ -256,12 +256,14 @@ body {
 }
 
 .magic-icon {
+  /* ✅ CPU FIX: opacity-only animation (GPU compositor, no paint) */
   animation: sparkle 2s ease-in-out infinite;
+  will-change: opacity;
 }
 
 @keyframes sparkle {
-  0%, 100% { transform: scale(1) rotate(0deg); }
-  50% { transform: scale(1.2) rotate(180deg); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 
@@ -533,7 +535,6 @@ body {
   margin-bottom: 12px;
 }
 
-/* Show All Groups Primary Button */
 .show-all-groups-primary {
   width: 100%;
   padding: 12px 20px;
@@ -551,16 +552,14 @@ body {
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(30, 178, 255, 0.4);
   margin-bottom: 12px;
-  animation: pulseGlow 2s ease-in-out infinite;
+  /* ✅ CPU FIX: removed pulseGlow (box-shadow animation = paint every frame) */
+  /* Static box-shadow is fine; animation removed to save CPU */
 }
 
+/* pulseGlow kept as definition but no longer applied by default */
 @keyframes pulseGlow {
-  0%, 100% {
-    box-shadow: 0 4px 15px rgba(30, 178, 255, 0.4);
-  }
-  50% {
-    box-shadow: 0 6px 25px rgba(30, 178, 255, 0.7);
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
 }
 
 .show-all-groups-primary:hover {
@@ -1007,7 +1006,9 @@ body {
 #progress-text {
   font-weight: 600;
   color: #1eb2ff;
+  /* ✅ CPU FIX: opacity-only (GPU compositor) */
   animation: pulse 2s ease-in-out infinite;
+  will-change: opacity;
 }
 
 @keyframes pulse {
@@ -1051,12 +1052,14 @@ body {
   width: 100%;
   height: 100%;
   background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  /* ✅ CPU FIX: transform-only (GPU compositor, no paint) */
   animation: shimmer 2s infinite;
+  will-change: transform;
 }
 
 @keyframes shimmer {
-  0% { left: -100%; }
-  100% { left: 100%; }
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(200%); }
 }
 
 /* AI Content Modal */
@@ -1715,7 +1718,9 @@ select, input:not([type="checkbox"]), textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* ✅ CPU FIX: opacity-only pulse (GPU compositor) */
   animation: pulse 2s infinite;
+  will-change: opacity;
 }
 
 .autofill-text {
@@ -2327,18 +2332,14 @@ select, input:not([type="checkbox"]), textarea {
   transition: all 0.3s ease;
   box-shadow: 0 6px 20px rgba(255, 64, 129, 0.4);
   flex-shrink: 0;
+  /* ✅ CPU FIX: opacity-only pulse instead of box-shadow animation */
   animation: tutorialPulse 2s ease-in-out infinite;
+  will-change: opacity;
 }
 
 @keyframes tutorialPulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 6px 20px rgba(255, 64, 129, 0.4);
-  }
-  50% {
-    transform: scale(1.02);
-    box-shadow: 0 8px 30px rgba(255, 64, 129, 0.6);
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.82; }
 }
 
 .tutorial-button:hover {
@@ -2698,7 +2699,9 @@ select, input:not([type="checkbox"]), textarea {
   font-size: 72px;
   margin-bottom: 15px;
   opacity: 0.3;
+  /* ✅ CPU FIX: transform-only float (GPU compositor) */
   animation: float 3s ease-in-out infinite;
+  will-change: transform;
 }
 
 @keyframes float {
@@ -2769,7 +2772,21 @@ select, input:not([type="checkbox"]), textarea {
 .status-indicator.is-running .status-dot {
     background: #4ade80;
     box-shadow: 0 0 10px #4ade80;
+    /* ✅ CPU FIX: opacity+scale only (GPU compositor, no box-shadow animation) */
     animation: statusPulse 1.5s infinite ease-in-out;
+    will-change: transform, opacity;
+}
+
+/* TRIGGER ARMED dot — same compositor-friendly animation */
+.status-indicator.is-armed .status-dot {
+    animation: statusPulse 1.5s infinite ease-in-out;
+    will-change: transform, opacity;
+}
+
+@keyframes statusPulse {
+    0%   { transform: scale(1);   opacity: 1; }
+    50%  { transform: scale(1.3); opacity: 0.6; }
+    100% { transform: scale(1);   opacity: 1; }
 }
 
 .status-text {
@@ -2779,12 +2796,6 @@ select, input:not([type="checkbox"]), textarea {
 
 .status-indicator.is-running .status-text {
     color: #4ade80;
-}
-
-@keyframes statusPulse {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.3); opacity: 0.7; }
-    100% { transform: scale(1); opacity: 1; }
 }
 
 /* Custom Alert Modal Styles */

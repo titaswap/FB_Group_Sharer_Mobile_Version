@@ -9,6 +9,50 @@ document.addEventListener('DOMContentLoaded', () => {
   initGroupsUI();         // panel_groups_ui.js
 
   // ============================================================
+  // NEW TAB MODE TOGGLE — tab_automation_manager.js
+  // ============================================================
+  (() => {
+    const toggle   = document.getElementById('tab-auto-mode-toggle');
+    const slider   = document.getElementById('tab-auto-mode-slider');
+    const knob     = document.getElementById('tab-auto-mode-knob');
+    const statusTx = document.getElementById('tab-auto-mode-status');
+    if (!toggle || !slider || !knob || !statusTx) return;
+
+    const applyVisual = (on) => {
+      if (on) {
+        slider.style.background    = 'rgba(30,178,255,0.6)';
+        slider.style.borderColor   = 'rgba(30,178,255,0.8)';
+        knob.style.transform       = 'translateX(18px)';
+        knob.style.background      = '#1eb2ff';
+        statusTx.style.color       = '#1eb2ff';
+        statusTx.textContent       = 'ON';
+      } else {
+        slider.style.background    = 'rgba(255,255,255,0.1)';
+        slider.style.borderColor   = 'rgba(255,255,255,0.15)';
+        knob.style.transform       = 'translateX(0)';
+        knob.style.background      = '#9ca3af';
+        statusTx.style.color       = 'rgba(255,255,255,0.4)';
+        statusTx.textContent       = 'OFF';
+      }
+    };
+
+    // storage থেকে saved state load করো
+    if (typeof TabAutomationManager !== 'undefined') {
+      TabAutomationManager.isEnabled((on) => {
+        toggle.checked = on;
+        applyVisual(on);
+      });
+
+      toggle.addEventListener('change', () => {
+        const on = toggle.checked;
+        TabAutomationManager.setEnabled(on);
+        applyVisual(on);
+        console.log(`🔄 [PANEL] New Tab Mode: ${on ? 'ON' : 'OFF'}`);
+      });
+    }
+  })();
+
+  // ============================================================
   // MAIN APPLICATION ELEMENTS
   // ============================================================
   const shareBtn = document.getElementById('share-button');
@@ -28,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Visit Link button
   const visitLinkBtn = document.getElementById('visit-link-btn');
-  if (visitLinkBtn) visitLinkBtn.textContent = '🚀 Visit & Prepare Post';
+  if (visitLinkBtn) visitLinkBtn.textContent = '🚀 Start Auto Share';
   const targetPostUrlInput = document.getElementById('post-link-to-visit');
   const batchSizeInput = document.getElementById('batch-size-input');
 
@@ -62,6 +106,16 @@ document.addEventListener('DOMContentLoaded', () => {
     intervalType.addEventListener('change', updateSchedulePreview);
     intervalValue.addEventListener('input', updateSchedulePreview);
   }
+  
+  const scheduleRandomize = document.getElementById('schedule-randomize');
+  const scheduleIntervalMax = document.getElementById('schedule-interval-max-value');
+  
+  if (scheduleRandomize) {
+      scheduleRandomize.addEventListener('change', updateSchedulePreview);
+  }
+  if (scheduleIntervalMax) {
+      scheduleIntervalMax.addEventListener('input', updateSchedulePreview);
+  }
 
   // --- TRIGGER PRESETS & WORKFLOW LOGIC ---
   const groupPresetsDropdown = document.getElementById('groupPresetsDropdown');
@@ -90,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div>
              <div style="color:#fff; font-weight:800; font-size:14px; letter-spacing:0.3px;">${p.name}</div>
              <div style="color:rgba(255,255,255,0.4); font-weight:600; font-size:10px; margin-top:4px;">
-                🔄 ${p.val} ${p.type} • 📦 Batch: ${p.batchSize || '10'} • ⏳ Delay: ${p.delayMin || 0}m ${p.delaySec || 30}s
+                🔄 ${p.isRandom ? (p.val + ' to ' + p.maxVal) : p.val} ${p.type} • 📦 Batch: ${p.batchSize || '10'} • ⏳ Delay: ${p.delayMin || 0}m ${p.delaySec || 30}s
              </div>
           </div>
           <div style="display:flex; gap:10px;">
@@ -107,6 +161,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // AUTO-FILL EVERYTHING!
             if (intervalType) intervalType.value = p.type || 'minutes';
             if (intervalValue) intervalValue.value = p.val || 30;
+            if (document.getElementById('schedule-randomize')) document.getElementById('schedule-randomize').checked = p.isRandom || false;
+            if (document.getElementById('schedule-interval-max-value')) document.getElementById('schedule-interval-max-value').value = p.maxVal || p.val || 30;
             if (document.getElementById('batch-size-input')) document.getElementById('batch-size-input').value = p.batchSize || 10;
             if (document.getElementById('batch-delay-min')) document.getElementById('batch-delay-min').value = p.delayMin || 0;
             if (document.getElementById('batch-delay-sec')) document.getElementById('batch-delay-sec').value = p.delaySec || 30;
@@ -151,8 +207,10 @@ document.addEventListener('DOMContentLoaded', () => {
         name,
         type: intervalType?.value || 'minutes',
         val: intervalValue?.value || 30,
+        isRandom: document.getElementById('schedule-randomize')?.checked || false,
+        maxVal: document.getElementById('schedule-interval-max-value')?.value || intervalValue?.value || 30,
         batchSize: document.getElementById('batch-size-input')?.value || 10,
-        delayMin: document.getElementById('batch-delay-min')?.value || 0,
+        delayMin: document.getElementById('batch-delay-min')?.value || 1,
         delaySec: document.getElementById('batch-delay-sec')?.value || 30,
         postUrl: document.getElementById('post-link-to-visit')?.value || "",
         checkedPresetIds: checkedIds
@@ -193,13 +251,15 @@ document.addEventListener('DOMContentLoaded', () => {
        if (batchSize) batchSize.value = 10;
 
        const waitMin = document.getElementById('batch-delay-min');
-       if (waitMin) waitMin.value = 0;
+       if (waitMin) waitMin.value = 1;
 
        const waitSec = document.getElementById('batch-delay-sec');
        if (waitSec) waitSec.value = 30;
 
        if (intervalValue) intervalValue.value = 30;
        if (intervalType) intervalType.value = 'minutes';
+       const randomizeCb = document.getElementById('schedule-randomize');
+       if (randomizeCb) randomizeCb.checked = true;
 
        // 2. Uncheck All Groups & Presets
        document.querySelectorAll('.group-checkbox').forEach(cb => cb.checked = false);
@@ -227,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
       postNowBtn.classList.add('active');
       postLaterBtn.classList.remove('active');
       scheduleContainer.classList.add('hidden');
-      if (visitLinkBtn) visitLinkBtn.textContent = '🚀 Visit & Prepare Post';
+      if (visitLinkBtn) visitLinkBtn.textContent = '🚀 Start Auto Share';
     });
 
     postLaterBtn.addEventListener('click', (e) => {
@@ -246,10 +306,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const activeTriggerInfo = document.getElementById('active-trigger-info');
   const topActiveTriggerInfo = document.getElementById('top-active-trigger-info');
 
+  // ✅ CPU FIX: Declare countdown references + cache BEFORE deactivateAction
+  // so that deactivateAction's closure can safely reference them.
+  const countdownNode = document.getElementById('next-trigger-countdown');
+  const topCountdownNode = document.getElementById('top-next-trigger-countdown');
+  let _triggerActive = false;
+  let _nextTriggerTime = null;
+
   const deactivateAction = () => {
     chrome.runtime.sendMessage({ type: 'clear_schedule_alarm' });
     addActivityLog(`Schedule trigger deactivated.`, 'deactivate', '🗑️');
     chrome.storage.local.remove(['scheduled_config', 'next_trigger_time'], () => {
+         // ✅ CPU FIX: immediately clear local cache so countdown stops without waiting for 10s sync
+         _triggerActive = false;
+         _nextTriggerTime = null;
          showCustomAlert("Deactivated", "Your recurring trigger has been stopped.", "🛑");
          if (activeTriggerInfo) activeTriggerInfo.style.display = 'none';
          if (topActiveTriggerInfo) topActiveTriggerInfo.classList.add('hidden');
@@ -285,50 +355,77 @@ document.addEventListener('DOMContentLoaded', () => {
   if (topCancelTriggerBtn) topCancelTriggerBtn.addEventListener('click', (e) => { e.stopPropagation(); deactivateAction(); });
 
   // --- TRIGGER COUNTDOWN LOOP ---
-  const countdownNode = document.getElementById('next-trigger-countdown');
-  const topCountdownNode = document.getElementById('top-next-trigger-countdown');
-  setInterval(() => {
+  // ✅ CPU FIX: Only poll storage every 2s (was 1s), and skip DOM update entirely
+  // when no trigger is scheduled. This halves the storage read rate and avoids
+  // unnecessary work when the panel is idle.
+  // (countdownNode, topCountdownNode, _triggerActive, _nextTriggerTime declared above)
+
+  // Lightweight storage sync — runs every 10s to refresh the cache
+  const _syncTriggerCache = () => {
+    if (document.hidden) return; // ✅ CPU FIX: skip entirely if panel is backgrounded
     chrome.storage.local.get(['next_trigger_time', 'scheduled_config'], (res) => {
-        if (res.next_trigger_time && res.scheduled_config) {
-            const now = Date.now();
-            const diff = res.next_trigger_time - now;
-            
-            if (diff > 0) {
-                const totalSec = Math.floor(diff / 1000);
-                const h = Math.floor(totalSec / 3600);
-                const m = Math.floor((totalSec % 3600) / 60);
-                const s = totalSec % 60;
-                
-                let timeStr = "";
-                if (h > 0) timeStr += `${h}h `;
-                if (m > 0 || h > 0) timeStr += `${m}m `;
-                timeStr += `${s}s`;
-                
-                if (countdownNode) countdownNode.textContent = `Next trigger in: ${timeStr}`;
-                if (topCountdownNode) topCountdownNode.textContent = `Next: ${timeStr}`;
-            } else {
-                if (countdownNode) countdownNode.textContent = "Launching now...";
-                if (topCountdownNode) topCountdownNode.textContent = "Launching...";
-            }
-        } else {
-            if (countdownNode) countdownNode.textContent = "";
-            if (topCountdownNode) topCountdownNode.textContent = "";
-        }
+      _triggerActive = !!(res.next_trigger_time && res.scheduled_config);
+      _nextTriggerTime = res.next_trigger_time || null;
+      if (!_triggerActive) {
+        if (countdownNode) countdownNode.textContent = '';
+        if (topCountdownNode) topCountdownNode.textContent = '';
+      }
     });
-  }, 1000);
+  };
+  _syncTriggerCache();
+  setInterval(_syncTriggerCache, 10000); // re-sync every 10s
+
+  const _fastTick = () => {
+    // ✅ CPU FIX: idle or hidden — skip entirely
+    if (!_triggerActive || !_nextTriggerTime || document.hidden) return; 
+    const now = Date.now();
+    const diff = _nextTriggerTime - now;
+    if (diff > 0) {
+      const totalSec = Math.floor(diff / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      let timeStr = '';
+      if (h > 0) timeStr += `${h}h `;
+      if (m > 0 || h > 0) timeStr += `${m}m `;
+      timeStr += `${s}s`;
+      if (countdownNode) countdownNode.textContent = `Next trigger in: ${timeStr}`;
+      if (topCountdownNode) topCountdownNode.textContent = `Next: ${timeStr}`;
+    } else {
+      if (countdownNode) countdownNode.textContent = 'Launching now...';
+      if (topCountdownNode) topCountdownNode.textContent = 'Launching...';
+    }
+  };
+  
+  // Fast tick (2s) — only does math, no storage I/O, when trigger is active
+  setInterval(_fastTick, 2000);
+
+  // Resume updating immediately when tab becomes visible
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      _syncTriggerCache();
+      _fastTick();
+    }
+  });
 
   checkActiveTrigger();
 
   if (visitLinkBtn) {
     visitLinkBtn.addEventListener('click', () => {
-      if (!targetPostUrlInput || !targetPostUrlInput.value.trim()) {
-        showCustomAlert("Link Missing", "Please paste a Facebook post link first!", "🔗");
-        return;
-      }
-      const url = targetPostUrlInput.value.trim();
-      if (!url.includes('facebook.com')) {
-        showCustomAlert("Invalid Link", "Please enter a valid Facebook link.", "⚠️");
-        return;
+      // ── ROTATOR-AWARE / REMOTE-CONTROL-AWARE URL RESOLUTION ─────
+      const rotatorActive    = window.MultiLinkRotator      && window.MultiLinkRotator.isEnabled();
+      const remoteCtrlActive = window.RemoteLinkController  && window.RemoteLinkController.isEnabled();
+
+      if (!rotatorActive && !remoteCtrlActive) {
+        if (!targetPostUrlInput || !targetPostUrlInput.value.trim()) {
+          showCustomAlert("Link Missing", "Please paste a Facebook post link first!", "🔗");
+          return;
+        }
+        const _urlCheck = targetPostUrlInput.value.trim();
+        if (!_urlCheck.includes('facebook.com')) {
+          showCustomAlert("Invalid Link", "Please enter a valid Facebook link.", "⚠️");
+          return;
+        }
       }
 
       // INSTANT UI FEEDBACK: Show "Running" as soon as clicked
@@ -343,156 +440,265 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!targetTabId) {
         showCustomAlert('Error', 'Could not find target Facebook tab. Try reopening the panel.', '❌');
         visitLinkBtn.disabled = false;
-        visitLinkBtn.textContent = '🚀 Visit & Prepare Post';
+        visitLinkBtn.textContent = '🚀 Start Auto Share';
         updateSignalStatus(false); // Reset signal status on error
         return;
       }
 
-      // 1. Get ALL groups to select (Step 2 UI + Selected Presets)
-      chrome.storage.local.get(['groupPresets'], (result) => {
-        const presets = result.groupPresets || [];
-        const combinedGroupsSet = new Set();
-
-        // 1a. Grab from Step 2 Checkboxes
-        document.querySelectorAll('.group-checkbox:checked').forEach(cb => {
-            const label = cb.nextElementSibling;
-            if (label) combinedGroupsSet.add(label.textContent.trim());
-        });
-
-        // 1b. Grab from Checked Presets in Dropdown
-        const checkedPresetCbs = document.querySelectorAll('.quick-preset-checkbox:checked');
-        checkedPresetCbs.forEach(cb => {
-            const preset = presets.find(p => p.id === cb.dataset.id);
-            if (preset && preset.groups) {
-                preset.groups.forEach(g => combinedGroupsSet.add(g));
+      // ── CORE AUTOMATION (extracted so rotator can inject the URL) ─────────
+      function _runWithUrl(rawUrl) {
+        chrome.runtime.sendMessage({ type: 'RESOLVE_FB_LINK', url: rawUrl }, (res) => {
+            const url = (res && res.url) ? res.url : rawUrl;
+            if (targetPostUrlInput && targetPostUrlInput.value.trim() === rawUrl) {
+                targetPostUrlInput.value = url;
             }
-        });
+            
+        // 1. Get ALL groups to select (Step 2 UI + Selected Presets)
+        chrome.storage.local.get(['groupPresets'], (result) => {
+          const presets = result.groupPresets || [];
+          // Use an array to preserve order and duplicates
+          const finalGroupsToSelect = [];
 
-        const finalGroupsToSelect = Array.from(combinedGroupsSet);
-
-        if (finalGroupsToSelect.length === 0) {
-            showCustomAlert("No Groups Selected", "Please select a preset or an individual group to share to.", "⚠️");
-            visitLinkBtn.disabled = false;
-            visitLinkBtn.textContent = '🚀 Visit & Prepare Post';
-            return;
-        }
-
-        // --- BATCH LOGIC ---
-        const batchSizeInput = document.getElementById('batch-size-input');
-        const batchSize = parseInt(batchSizeInput ? batchSizeInput.value : 10) || 10;
-        
-        const bDelayMin = document.getElementById('batch-delay-min');
-        const bDelaySec = document.getElementById('batch-delay-sec');
-        const userBatchDelay = (parseInt(bDelayMin ? bDelayMin.value : 0) * 60) + (parseInt(bDelaySec ? bDelaySec.value : 30) || 0);
-
-        // Split finalGroupsToSelect into chunks
-        const batches = [];
-        for (let i = 0; i < finalGroupsToSelect.length; i += batchSize) {
-          batches.push(finalGroupsToSelect.slice(i, i + batchSize));
-        }
-
-        console.log(`📦 Initializing Batching: ${batches.length} batches. Delay: ${userBatchDelay}s`);
-        
-        const totalGroups = finalGroupsToSelect.length;
-
-        if (currentScheduleMode === 'later') {
-          const type = intervalType ? intervalType.value : 'minutes';
-          const val = parseInt(intervalValue ? intervalValue.value : 30) || 10;
-          
-          let periodMins = val;
-          if (type === 'seconds') periodMins = val / 60;
-          if (type === 'hours') periodMins = val * 60;
-          if (type === 'days') periodMins = val * 1440;
-
-          // Store for persistence
-          chrome.storage.local.set({
-              'scheduled_config': {
-                   url: url,
-                   batches: batches,
-                   totalGroups: totalGroups,
-                   batchDelay: userBatchDelay,
-                   isRecurring: true,
-                   intervalValue: val,
-                   intervalType: type,
-                   periodMins: periodMins
+          // 1a. Grab from Step 2 Checkboxes
+          document.querySelectorAll('.group-checkbox:checked').forEach(cb => {
+              try {
+                  const groupObj = JSON.parse(cb.dataset.groupObj);
+                  finalGroupsToSelect.push(groupObj);
+              } catch (e) {
+                  const label = cb.nextElementSibling;
+                  if (label) finalGroupsToSelect.push(normalizeGroupEntry(label.textContent.trim()));
               }
-          }, () => {
-              chrome.runtime.sendMessage({ 
-                  type: 'set_schedule_alarm', 
-                  recurring: true,
-                  period: periodMins,
-                  url: url
-              });
-              
-              showCustomAlert("Trigger Activated", `Automation will run every ${val} ${type}.`, "🔄");
-              updateUIProgress(0, totalGroups, 1, batches.length, `Trigger active: Every ${val} ${type}`);
-              visitLinkBtn.disabled = false;
-              visitLinkBtn.textContent = '🔁 Update Trigger';
-              
-              // IMMEDIATELY SHOW THE DEACTIVATE BUTTON
-              checkActiveTrigger();
-              updateSignalStatus(false);
           });
-          return;
-      }
 
-      // 2. Standard "Now" Flow
-      
-      // ✅ INSTANT FOCUS: Release panel focus lock *before* flipping to the FB tab
-      // This prevents the panel's 'visibilitychange' listener from trying to pull focus back immediately.
-      if (typeof window._wfm_onBatchRunning === 'function') {
-          window._wfm_onBatchRunning();
-      }
+          // 1b. Grab from Checked Presets in Dropdown
+          const checkedPresetCbs = document.querySelectorAll('.quick-preset-checkbox:checked');
+          checkedPresetCbs.forEach(cb => {
+              const preset = presets.find(p => p.id === cb.dataset.id);
+              if (preset && preset.groups) {
+                  preset.groups.forEach(g => finalGroupsToSelect.push(normalizeGroupEntry(g)));
+              }
+          });
 
-      // Bring FB tab to front immediately without waiting for storage saves or async checks
-      chrome.tabs.update(targetTabId, { active: true }, () => {});
-      chrome.tabs.get(targetTabId, tab => {
-          if (tab && tab.windowId) {
-              chrome.windows.update(tab.windowId, { focused: true, drawAttention: true }, () => {});
+          if (finalGroupsToSelect.length === 0) {
+              showCustomAlert("No Groups Selected", "Please select a preset or an individual group to share to.", "⚠️");
+              visitLinkBtn.disabled = false;
+              visitLinkBtn.textContent = '🚀 Start Auto Share';
+              return;
           }
-      });
 
-      chrome.storage.local.set({ 
-          'auto_trigger_share': true,
-          'all_batches': batches,
-          'total_groups_count': totalGroups,
-          'groups_processed_so_far': 0,
-          'current_batch_index': 0,
-          'current_batch_delay': userBatchDelay,
-          'current_post_url': url,
-          'auto_select_groups': batches[0] // Load first batch immediately
-        }, () => {
-          // 3. Locate or Prepare target tab for actual URL injection/reload
-          provideActiveTab((verifiedTabId) => {
-              chrome.tabs.get(verifiedTabId, (currentTab) => {
-                 if (chrome.runtime.lastError || !currentTab || !currentTab.windowId) {
-                     // Last fallback
-                     chrome.tabs.create({ url: url }, (newTab) => {
-                        console.log("Created new tab as last resort.");
-                     });
-                     return;
-                 }
-                 
-                 currentBatchRetries = 0; 
+          // --- BATCH LOGIC ---
+          const batchSizeInput = document.getElementById('batch-size-input');
+          const batchSize = parseInt(batchSizeInput ? batchSizeInput.value : 10) || 10;
+          
+          const bDelayMin = document.getElementById('batch-delay-min');
+          const bDelaySec = document.getElementById('batch-delay-sec');
+          const userBatchDelay = (parseInt(bDelayMin ? bDelayMin.value : 1) * 60) + (parseInt(bDelaySec ? bDelaySec.value : 30) || 0);
 
-                 chrome.tabs.update(verifiedTabId, { url: url }, (updatedTab) => {
+          // Split finalGroupsToSelect into chunks
+          const batches = [];
+          for (let i = 0; i < finalGroupsToSelect.length; i += batchSize) {
+            batches.push(finalGroupsToSelect.slice(i, i + batchSize));
+          }
+
+          console.log(`📦 Initializing Batching: ${batches.length} batches. Delay: ${userBatchDelay}s`);
+          
+          const totalGroups = finalGroupsToSelect.length;
+
+          if (currentScheduleMode === 'later') {
+            const type = intervalType ? intervalType.value : 'minutes';
+            const val = parseInt(intervalValue ? intervalValue.value : 30) || 10;
+            const isRandom = document.getElementById('schedule-randomize')?.checked || false;
+            const maxVal = parseInt(document.getElementById('schedule-interval-max-value')?.value) || val;
+            
+            let periodMins = val;
+            let maxPeriodMins = maxVal;
+            if (type === 'seconds') { periodMins = val / 60; maxPeriodMins = maxVal / 60; }
+            if (type === 'hours') { periodMins = val * 60; maxPeriodMins = maxVal * 60; }
+            if (type === 'days') { periodMins = val * 1440; maxPeriodMins = maxVal * 1440; }
+
+            // Store for persistence. useRotator=true tells background.js to call
+            // getNextLink() storage logic on each alarm fire so it auto-cycles.
+            chrome.storage.local.set({
+                'scheduled_config': {
+                     url: url,
+                     batches: batches,
+                     totalGroups: totalGroups,
+                     batchDelay: userBatchDelay,
+                     isRecurring: true,
+                     intervalValue: val,
+                     intervalMax: maxVal,
+                     isRandom: isRandom,
+                     intervalType: type,
+                     periodMins: periodMins,
+                     maxPeriodMins: maxPeriodMins,
+                     useRotator: rotatorActive  // ← rotator flag for background.js
+                }
+            }, () => {
+                chrome.runtime.sendMessage({ 
+                    type: 'set_schedule_alarm', 
+                    recurring: true,
+                    period: periodMins,
+                    maxPeriod: maxPeriodMins,
+                    isRandom: isRandom,
+                    url: url
+                });
+                
+                const rotatorNote = rotatorActive ? ' 🔁 Rotator: ON' : '';
+                const alertTxt = isRandom ? `Every ${val} to ${maxVal} ${type}` : `Every ${val} ${type}`;
+                showCustomAlert("Trigger Activated", `Automation will run: ${alertTxt}.${rotatorNote}`, "🔄");
+                updateUIProgress(0, totalGroups, 1, batches.length, `Trigger active: ${alertTxt}`);
+                visitLinkBtn.disabled = false;
+                visitLinkBtn.textContent = '🔁 Update Trigger';
+                
+                // IMMEDIATELY SHOW THE DEACTIVATE BUTTON
+                checkActiveTrigger();
+                updateSignalStatus(false);
+            });
+            return;
+          }
+
+          // 2. Standard "Now" Flow
+          
+          // ✅ INSTANT FOCUS: Release panel focus lock *before* flipping to the FB tab
+          if (typeof window._wfm_onBatchRunning === 'function') {
+              window._wfm_onBatchRunning();
+          }
+
+          // Bring FB tab to front immediately
+          chrome.tabs.update(targetTabId, { active: true }, () => {});
+          chrome.tabs.get(targetTabId, tab => {
+              if (tab && tab.windowId) {
+                  chrome.windows.update(tab.windowId, { focused: true, drawAttention: true }, () => {});
+              }
+          });
+
+          chrome.storage.local.set({ 
+              'auto_trigger_share': true,
+              'all_batches': batches,
+              'total_groups_count': totalGroups,
+              'groups_processed_so_far': 0,
+              'current_batch_index': 0,
+              'current_batch_delay': userBatchDelay,
+              'current_post_url': url,
+              'auto_select_groups': batches[0] // Load first batch immediately
+            }, () => {
+
+              // ── NEW TAB MODE CHECK ─────────────────────────────────
+              const _doNavigate = (tabId) => {
+                 currentBatchRetries = 0;
+                 chrome.tabs.update(tabId, { url: url }, (updatedTab) => {
                     if (chrome.runtime.lastError) {
                        console.error("Tab update error:", chrome.runtime.lastError.message);
                        return;
                     }
-                    console.log("🚀 Automation Started in Tab: " + verifiedTabId);
+                    console.log("🚀 Automation Started in Tab: " + tabId);
                     updateUIProgress(0, totalGroups, 1, batches.length, "Navigating to URL...");
                     setTimeout(() => {
                        if (visitLinkBtn) {
-                         visitLinkBtn.textContent = '🚀 Visit & Prepare Post';
+                         visitLinkBtn.textContent = '🚀 Start Auto Share';
                          visitLinkBtn.disabled = false;
                        }
                     }, 2000);
                  });
-              });
+              };
+
+              const _launchInNewTab = () => {
+                 currentBatchRetries = 0;
+                 TabAutomationManager.openTab(url, (newTabId) => {
+                    console.log("🆕 [PANEL] New Tab Mode: automation tab opened: " + newTabId);
+                    updateUIProgress(0, totalGroups, 1, batches.length, "Navigating to URL...");
+                    setTimeout(() => {
+                       if (visitLinkBtn) {
+                         visitLinkBtn.textContent = '🚀 Start Auto Share';
+                         visitLinkBtn.disabled = false;
+                       }
+                    }, 2000);
+                 });
+              };
+
+              if (typeof TabAutomationManager !== 'undefined') {
+                TabAutomationManager.isEnabled((tabModeOn) => {
+                  if (tabModeOn) {
+                    // New Tab Mode ON → নতুন ট্যাব ওপেন করো
+                    _launchInNewTab();
+                  } else {
+                    // Normal Mode → আগের মতো existing tab-এ নেভিগেট করো
+                    provideActiveTab((verifiedTabId) => {
+                        chrome.tabs.get(verifiedTabId, (currentTab) => {
+                           if (chrome.runtime.lastError || !currentTab || !currentTab.windowId) {
+                               chrome.tabs.create({ url: url }, (newTab) => {
+                                  console.log("Created new tab as last resort.");
+                               });
+                               return;
+                           }
+                           _doNavigate(verifiedTabId);
+                        });
+                    });
+                  }
+                });
+              } else {
+                // TabAutomationManager না থাকলে fallback
+                provideActiveTab((verifiedTabId) => {
+                    chrome.tabs.get(verifiedTabId, (currentTab) => {
+                       if (chrome.runtime.lastError || !currentTab || !currentTab.windowId) {
+                           chrome.tabs.create({ url: url }, (newTab) => {
+                              console.log("Created new tab as last resort.");
+                           });
+                           return;
+                       }
+                       _doNavigate(verifiedTabId);
+                    });
+                });
+              }
+
+            });
+        });
+        });
+      } // end _runWithUrl
+
+      // ── DECIDE URL SOURCE ──────────────────────────────────────────
+      // Priority: Remote Sheet Control > Rotator > Manual URL
+      if (remoteCtrlActive) {
+        // Fetch active URL(s) from Google Sheet using rotation index
+        window.RemoteLinkController.testFetch(result => {
+          if (!result.ok || !result.nextUrl) {
+            showCustomAlert("Remote Control", result.error || "No active link found in sheet.", "🌐");
+            visitLinkBtn.disabled = false;
+            visitLinkBtn.textContent = '🚀 Start Auto Share';
+            updateSignalStatus(false);
+            return;
+          }
+          const remoteUrl = result.nextUrl;
+          const shortLinksPool = result.shortLinksPool || [];
+          // Advance the index for next run
+          const nextIdx = (result.currentIdx + 1) % result.urls.length;
+          chrome.storage.local.set({ 
+            remoteCtrlIndex: nextIdx,
+            current_short_links_pool: shortLinksPool
+          }, () => {
+            console.log(`🌐 [Remote] Using link #${result.currentIdx + 1}: ${remoteUrl} | Short links fetched: ${shortLinksPool.length}`);
+            if (targetPostUrlInput) targetPostUrlInput.value = remoteUrl;
+            _runWithUrl(remoteUrl);
           });
         });
-      });
+      } else if (rotatorActive) {
+        // Get next link from rotator (advances rotation index in storage)
+        window.MultiLinkRotator.getNextLink((rotatorUrl) => {
+          if (!rotatorUrl) {
+            showCustomAlert("Rotator Error", "No links in rotator list. Please add links or disable rotation.", "🔁");
+            visitLinkBtn.disabled = false;
+            visitLinkBtn.textContent = '🚀 Start Auto Share';
+            updateSignalStatus(false);
+            return;
+          }
+          console.log(`🔁 [Rotator] Using link: ${rotatorUrl}`);
+          if (targetPostUrlInput) targetPostUrlInput.value = rotatorUrl;
+          _runWithUrl(rotatorUrl);
+        });
+      } else {
+        _runWithUrl(targetPostUrlInput.value.trim());
+      }
+
     });
   }
 

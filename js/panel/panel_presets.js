@@ -22,18 +22,52 @@ function openGroupPresetsManager() {
   renderPresetsManager();
 }
 
-function applyGroupsToMainList(groupNames) {
-  // 1. If groups are already in the DOM, select them immediately
-  const groupItems = document.querySelectorAll('.group-item');
-  if (groupItems.length > 0) {
+function applyGroupsToMainList(groups) {
+  const normalizedGroups = groups.map(normalizeGroupEntry);
+
+  const checkGroupsInDOM = () => {
+    const groupItems = document.querySelectorAll('.group-item');
+    if (groupItems.length === 0) return false;
+
+    // Uncheck all first
+    document.querySelectorAll('.group-checkbox').forEach(cb => cb.checked = false);
+
+    const matchedIndexes = new Set();
+    const domNameOccurrences = {};
+
     document.querySelectorAll('.group-checkbox').forEach(cb => {
-      const label = cb.nextElementSibling;
-      if (label) {
-        cb.checked = groupNames.includes(label.textContent.trim());
+      let cbGroup = {};
+      try { cbGroup = JSON.parse(cb.dataset.groupObj); } catch(e) {}
+      const nameContent = cbGroup.name || cb.nextElementSibling?.textContent.trim() || '';
+
+      domNameOccurrences[nameContent] = (domNameOccurrences[nameContent] || 0) + 1;
+
+      let matchedSavedIndex = -1;
+      for (let j = 0; j < normalizedGroups.length; j++) {
+          if (matchedIndexes.has(j)) continue;
+          const saved = normalizedGroups[j];
+
+          if (saved.id && cbGroup.id && !String(saved.id).startsWith('group_occurrence_') && !String(cbGroup.id).startsWith('group_occurrence_') && saved.id === cbGroup.id) { matchedSavedIndex = j; break; }
+          if (saved.url && cbGroup.url && saved.url === cbGroup.url) { matchedSavedIndex = j; break; }
+
+          if (saved.name === nameContent && (saved.occurrenceIndex === undefined || saved.occurrenceIndex === cbGroup.occurrenceIndex)) {
+              matchedSavedIndex = j; break;
+          }
+      }
+
+      if (matchedSavedIndex !== -1) {
+          matchedIndexes.add(matchedSavedIndex);
+          cb.checked = true;
       }
     });
+
     updateGroupCount(groupItems.length);
     updateToggleChosenBtn();
+    return true;
+  };
+
+  // 1. If groups are already in the DOM, select them immediately
+  if (checkGroupsInDOM()) {
     console.log("✅ Selected groups from DOM immediately.");
   }
 
@@ -44,12 +78,12 @@ function applyGroupsToMainList(groupNames) {
   chrome.tabs.sendMessage(targetTabId, { type: 'get_groups' }, (response) => {
     if (chrome.runtime.lastError) {
       // Only alert if we couldn't even find them in the current UI
-      if (groupItems.length === 0) {
+      if (document.querySelectorAll('.group-item').length === 0) {
         showCustomAlert("Connection Lost", "Please refresh the Facebook page to load groups first so you can apply presets.", "⚠️");
       }
       return;
     }
-    
+
     const managerModal = document.getElementById('presets-manager-modal');
     if (managerModal) managerModal.classList.add('hidden');
 
@@ -58,14 +92,7 @@ function applyGroupsToMainList(groupNames) {
       renderGroups(response.groups);
 
       setTimeout(() => {
-        document.querySelectorAll('.group-checkbox').forEach(cb => {
-          const label = cb.nextElementSibling;
-          if (label && groupNames.includes(label.textContent.trim())) {
-            cb.checked = true;
-          }
-        });
-        updateGroupCount(response.groups.length);
-        updateToggleChosenBtn();
+        checkGroupsInDOM();
       }, 150);
     }
   });
@@ -87,7 +114,7 @@ function renderQuickPresetDropdown() {
     presets.forEach(preset => {
       const item = document.createElement('div');
       item.style.cssText = 'padding: 10px 12px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 8px; margin: 2px 5px; transition: all 0.2s; color: #fff;';
-      
+
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.className = 'quick-preset-checkbox';
@@ -102,10 +129,10 @@ function renderQuickPresetDropdown() {
 
       item.appendChild(cb);
       item.appendChild(lbl);
-      
+
       item.onmouseenter = () => { item.style.background = 'rgba(30,178,255,0.1)'; };
       item.onmouseleave = () => { if(!cb.checked) item.style.background = 'transparent'; };
-      
+
       item.onclick = (e) => {
          if (e.target !== cb) cb.checked = !cb.checked;
          item.style.background = cb.checked ? 'rgba(30,178,255,0.15)' : 'transparent';
@@ -122,14 +149,14 @@ function updateQuickPresetSelection() {
     const presets = result.groupPresets || [];
     const checkedCbs = document.querySelectorAll('.quick-preset-checkbox:checked');
     const triggerText = document.getElementById('preset-trigger-text');
-    
-    let allSelectedGroups = new Set();
+
+    let allSelectedGroups = [];
     let selectedPresetCount = checkedCbs.length;
 
     checkedCbs.forEach(cb => {
        const preset = presets.find(p => p.id === cb.dataset.id);
        if (preset) {
-         preset.groups.forEach(g => allSelectedGroups.add(g));
+         preset.groups.forEach(g => allSelectedGroups.push(normalizeGroupEntry(g)));
        }
     });
 
@@ -146,13 +173,33 @@ function updateQuickPresetSelection() {
     // Automatically check/uncheck groups in main Step 2 UI
     const groupItemsInDom = document.querySelectorAll('.group-item');
     if (groupItemsInDom.length > 0) {
+        document.querySelectorAll('.group-checkbox').forEach(cb => cb.checked = false);
+
+        const matchedIndexes = new Set();
         document.querySelectorAll('.group-checkbox').forEach(cb => {
-            const label = cb.nextElementSibling;
-            if (label) {
-                cb.checked = allSelectedGroups.has(label.textContent.trim());
+            let cbGroup = {};
+            try { cbGroup = JSON.parse(cb.dataset.groupObj); } catch(e) {}
+            const nameContent = cbGroup.name || cb.nextElementSibling?.textContent.trim() || '';
+
+            let matchedSavedIndex = -1;
+            for (let j = 0; j < allSelectedGroups.length; j++) {
+                if (matchedIndexes.has(j)) continue;
+                const saved = allSelectedGroups[j];
+
+                if (saved.id && cbGroup.id && !String(saved.id).startsWith('group_occurrence_') && !String(cbGroup.id).startsWith('group_occurrence_') && saved.id === cbGroup.id) { matchedSavedIndex = j; break; }
+                if (saved.url && cbGroup.url && saved.url === cbGroup.url) { matchedSavedIndex = j; break; }
+
+                if (saved.name === nameContent && (saved.occurrenceIndex === undefined || saved.occurrenceIndex === cbGroup.occurrenceIndex)) {
+                    matchedSavedIndex = j; break;
+                }
+            }
+
+            if (matchedSavedIndex !== -1) {
+                matchedIndexes.add(matchedSavedIndex);
+                cb.checked = true;
             }
         });
-        updateGroupCount(allSelectedGroups.size);
+        updateGroupCount(matchedIndexes.size);
         updateToggleChosenBtn();
     }
   });
@@ -175,14 +222,14 @@ function renderPresetsManager() {
 
     container.innerHTML = presets.map(preset => {
       const createdDate = new Date(preset.createdAt).toLocaleDateString();
-      
+
       // Take first 3 group names for chips
       const limit = 3;
       const visibleGroups = preset.groups.slice(0, limit);
       const remainingCount = preset.groups.length - limit;
-      
+
       const chipsHtml = visibleGroups.map(g => {
-        const groupName = (typeof g === 'object' && g !== null) ? (g.name || g.id || 'Unnamed Group') : g;
+        const groupName = groupDisplayName(g);
         return `
           <span style="
             background: rgba(30,178,255,0.08);
@@ -223,7 +270,7 @@ function renderPresetsManager() {
         ">
           <!-- Checkbox for multi-select (fixed position) -->
           <input type="checkbox" class="preset-multi-select" data-id="${preset.id}" style="
-            position: absolute; left: 8px; top: 18px; 
+            position: absolute; left: 8px; top: 18px;
             width:16px; height:16px; accent-color:#1eb2ff; cursor:pointer;
           ">
 
@@ -288,8 +335,7 @@ function renderPresetsManager() {
              if (p) combinedGroups.push(...p.groups);
           });
 
-          const uniqueGroups = [...new Set(combinedGroups)];
-          applyGroupsToMainList(uniqueGroups);
+          applyGroupsToMainList(combinedGroups);
        });
     }
 
@@ -348,15 +394,16 @@ function openSavePresetModal(groups, skipQuestion = false) {
   const presetFormView = document.getElementById('preset-form-view');
 
   pendingPresetGroups = groups;
+  const presetGroupLabels = groups.map(groupDisplayName);
   if (presetGroupsCountQuestion) presetGroupsCountQuestion.textContent = `${groups.length} groups selected`;
   if (presetGroupsListQuestion) {
-    presetGroupsListQuestion.innerHTML = groups.slice(0, 8).map(g =>
+    presetGroupsListQuestion.innerHTML = presetGroupLabels.slice(0, 8).map(g =>
       `<div style="padding:3px 0; color:rgba(255,255,255,0.8); font-size:12px;">• ${g}</div>`
     ).join('') + (groups.length > 8 ? `<div style="color:rgba(255,255,255,0.5); font-size:11px;">... and ${groups.length - 8} more</div>` : '');
   }
   if (presetGroupsCount) presetGroupsCount.textContent = `${groups.length} groups selected`;
   if (presetGroupsList) {
-    presetGroupsList.innerHTML = groups.slice(0, 8).map(g =>
+    presetGroupsList.innerHTML = presetGroupLabels.slice(0, 8).map(g =>
       `<div style="padding:3px 0; color:rgba(255,255,255,0.8); font-size:12px;">• ${g}</div>`
     ).join('') + (groups.length > 8 ? `<div style="color:rgba(255,255,255,0.5); font-size:11px;">... and ${groups.length - 8} more</div>` : '');
   }
@@ -370,7 +417,7 @@ function openSavePresetModal(groups, skipQuestion = false) {
     if (presetQuestionView) presetQuestionView.classList.remove('hidden');
     if (presetFormView) presetFormView.classList.add('hidden');
   }
-  
+
   if (savePresetModal) savePresetModal.classList.remove('hidden');
 }
 
@@ -461,7 +508,7 @@ function renderTriggerPresetsManager() {
 
         updateSchedulePreview();
         showCustomAlert("Workflow Applied", `"${preset.name}" workflow has been loaded. Review settings then activate.`, "✅");
-        
+
         const triggerPresetsModal = document.getElementById('trigger-presets-modal');
         if (triggerPresetsModal) triggerPresetsModal.classList.add('hidden');
       });
@@ -729,7 +776,12 @@ function initPresetsUI() {
       document.getElementById('presets-manager-modal')?.classList.add('hidden');
       if (linkToPresetModal) {
         linkToPresetModal.classList.remove('hidden');
-        presetLinksInput.value = '';
+        if (presetLinksInput) {
+          presetLinksInput.value = '';
+          presetLinksInput.style.display = 'block';
+          const label = presetLinksInput.parentElement.querySelector('label');
+          if (label) label.style.display = 'block';
+        }
 
         if (linkPresetNameInput) {
           linkPresetNameInput.value = '';
@@ -762,6 +814,59 @@ function initPresetsUI() {
 
   if (fetchPresetLinksBtn) {
     fetchPresetLinksBtn.addEventListener('click', async () => {
+      // 1. Google Sheets dynamic table mode
+      const dynamicRows = document.querySelectorAll('.preset-dynamic-row');
+      if (dynamicRows.length > 0) {
+        const checkedRows = Array.from(dynamicRows).filter(tr => tr.querySelector('.preset-row-cb') && tr.querySelector('.preset-row-cb').checked);
+        if (checkedRows.length === 0) {
+           alert("Please select at least one row using the checkboxes to extract names.");
+           return;
+        }
+
+        fetchPresetLinksBtn.textContent = '⏳ Fetching Names...';
+        fetchPresetLinksBtn.disabled = true;
+        const summaryText = document.getElementById('extraction-summary-text');
+
+        let successCount = 0;
+        let failedCount = 0;
+
+        const promises = checkedRows.map(async (tr) => {
+           const aTag = tr.querySelector('a.preset-potential-link');
+           const inputField = tr.querySelector('.preset-extracted-name-input');
+           if(!inputField) return null;
+
+           let isSuccess = false;
+           if(aTag) {
+              const link = aTag.href;
+              const title = await fetchFacebookTitle(link);
+              if (title) {
+                 inputField.value = title;
+                 inputField.style.borderColor = 'rgba(74,222,128,0.4)';
+                 isSuccess = true;
+              } else {
+                 if(!inputField.value) inputField.placeholder = 'Failed... Type name here';
+                 inputField.style.borderColor = 'rgba(248,113,113,0.6)';
+                 isSuccess = false;
+              }
+           } else {
+              inputField.placeholder = "No link found";
+              isSuccess = false;
+           }
+
+           if (isSuccess) successCount++; else failedCount++;
+           if (summaryText) summaryText.innerHTML = `<span style="color:#4ade80">✅ ${successCount}</span> | <span style="color:#f87171">❌ ${failedCount}</span>`;
+           return isSuccess;
+        });
+
+        await Promise.all(promises);
+
+        if (summaryText) summaryText.innerHTML = `<span style="color:#4ade80">✅ ${successCount}</span> | <span style="color:#f87171">❌ ${failedCount}</span>`;
+        fetchPresetLinksBtn.textContent = '✨ Extract Group Names';
+        fetchPresetLinksBtn.disabled = false;
+        return;
+      }
+
+      // 2. Manual Textarea mode
       const linksText = presetLinksInput.value.trim();
       if (!linksText) {
         alert('Please paste some links first.');
@@ -785,14 +890,12 @@ function initPresetsUI() {
       let successCount = 0;
       let failedCount = 0;
 
-      for (let i = 0; i < links.length; i++) {
-        const link = links[i];
-        if (summaryText) summaryText.textContent = `Extracting ${i+1}/${links.length}...`;
+      const promises = links.map(async (link) => {
         const title = await fetchFacebookTitle(link);
-        
+
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-        
+
         const tdLink = document.createElement('td');
         tdLink.style.padding = '8px 10px';
         tdLink.style.fontSize = '11px';
@@ -801,7 +904,7 @@ function initPresetsUI() {
         tdLink.style.textOverflow = 'ellipsis';
         tdLink.style.whiteSpace = 'nowrap';
         tdLink.style.color = 'rgba(255,255,255,0.6)';
-        
+
         try {
           const urlObj = new URL(link);
           const parts = urlObj.pathname.split('/').filter(Boolean);
@@ -814,7 +917,7 @@ function initPresetsUI() {
 
         const tdName = document.createElement('td');
         tdName.style.padding = '6px 10px';
-        
+
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'extracted-group-name-input';
@@ -826,7 +929,7 @@ function initPresetsUI() {
         input.style.padding = '5px 8px';
         input.style.fontSize = '12px';
         input.style.boxSizing = 'border-box';
-        
+
         if (title) {
           input.value = title;
           input.style.borderColor = 'rgba(74,222,128,0.4)';
@@ -837,17 +940,19 @@ function initPresetsUI() {
           input.style.borderColor = 'rgba(248,113,113,0.6)';
           failedCount++;
         }
-        
+
         tdName.appendChild(input);
         tr.appendChild(tdLink);
         tr.appendChild(tdName);
         if (resultsTbody) resultsTbody.appendChild(tr);
-      }
 
-      if (summaryText) {
-        summaryText.innerHTML = `<span style="color:#4ade80">✅ ${successCount}</span> | <span style="color:#f87171">❌ ${failedCount}</span>`;
-      }
-      
+        if (summaryText) {
+          summaryText.innerHTML = `<span style="color:#4ade80">✅ ${successCount}</span> | <span style="color:#f87171">❌ ${failedCount}</span>`;
+        }
+      });
+
+      await Promise.all(promises);
+
       presetScrapedNamesContainer.classList.remove('hidden');
       fetchPresetLinksBtn.textContent = '✨ Extract Group Names';
       fetchPresetLinksBtn.disabled = false;
@@ -858,27 +963,44 @@ function initPresetsUI() {
     saveLinkPresetBtn.addEventListener('click', () => {
       const selectedAction = linkPresetSelect ? linkPresetSelect.value : 'new_preset';
       const presetName = linkPresetNameInput ? linkPresetNameInput.value.trim() : '';
-      
+
       if (selectedAction === 'new_preset' && !presetName) {
         alert('Please enter a name for your new preset.');
         return;
       }
 
-      const inputs = document.querySelectorAll('.extracted-group-name-input');
       const finalGroups = [];
-      inputs.forEach(inp => {
-        const val = inp.value.trim();
-        if (val.length > 0) finalGroups.push(val);
-      });
+      const dynamicRows = document.querySelectorAll('.preset-dynamic-row');
+
+      if(dynamicRows.length > 0) {
+         // Sheet mode
+         dynamicRows.forEach(tr => {
+            const cb = tr.querySelector('.preset-row-cb');
+            if(cb && cb.checked) {
+               const inp = tr.querySelector('.preset-extracted-name-input');
+               if(inp) {
+                  const val = inp.value.trim();
+                  if(val.length > 0) finalGroups.push(val);
+               }
+            }
+         });
+      } else {
+         // Textarea mode
+         const oldInputs = document.querySelectorAll('.extracted-group-name-input');
+         oldInputs.forEach(inp => {
+            const val = inp.value.trim();
+            if (val.length > 0) finalGroups.push(val);
+         });
+      }
 
       if (finalGroups.length === 0) {
-        alert('No valid group names found to save.');
+        alert('No valid group names found to save. Did you extract them or type them in?');
         return;
       }
 
       chrome.storage.local.get(['groupPresets'], (result) => {
         let presets = result.groupPresets || [];
-        
+
         if (selectedAction === 'new_preset') {
           // Create new preset
           const newPreset = {
@@ -895,15 +1017,15 @@ function initPresetsUI() {
           presets = presets.map(p => {
             if (p.id === selectedAction) {
               updatedName = p.name;
-              // Append new groups and remove duplicates
+              // Append new groups and preserve duplicates
               const combinedGroups = [...p.groups, ...finalGroups];
-              p.groups = [...new Set(combinedGroups)];
+              p.groups = combinedGroups;
             }
             return p;
           });
           saveAndNotify(`✅ Added ${finalGroups.length} new groups to "${updatedName}"!`);
         }
-        
+
         function saveAndNotify(msg) {
           chrome.storage.local.set({ groupPresets: presets }, () => {
              showCustomAlert("Success", msg, "✅");

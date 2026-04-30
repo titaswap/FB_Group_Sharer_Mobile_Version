@@ -40,10 +40,31 @@ function createSettingsPanel() {
         font-size:13px; box-sizing:border-box; outline:none;">
     </div>
 
+    <!-- Google Sheet URL -->
+    <div style="margin-bottom:11px;">
+      <label style="color:rgba(255,255,255,0.8); font-size:11px; font-weight:700; display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.4px;">📊 Public Google Sheet URL</label>
+      <input type="text" id="settings-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." style="
+        width:100%; padding:7px 10px; border:1px solid rgba(30,178,255,0.3);
+        border-radius:8px; background:rgba(0,12,35,0.6); color:#fff;
+        font-size:11px; box-sizing:border-box; outline:none;">
+    </div>
+
     <!-- Randomize -->
     <div style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="settings-randomize" checked style="width:16px; height:16px; accent-color:#1eb2ff; cursor:pointer;">
       <label for="settings-randomize" style="color:rgba(255,255,255,0.8); font-size:12px; cursor:pointer; font-weight:600;">Randomize Delay</label>
+    </div>
+
+    <!-- Clean Facebook Links -->
+    <div style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="settings-clean-links" checked style="width:16px; height:16px; accent-color:#1eb2ff; cursor:pointer;">
+      <label for="settings-clean-links" style="color:rgba(255,255,255,0.8); font-size:12px; cursor:pointer; font-weight:600;">Clean Facebook Links (Convert to Real ID)</label>
+    </div>
+
+    <!-- Rotate Short Links -->
+    <div style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="settings-rotate-short-links" style="width:16px; height:16px; accent-color:#1eb2ff; cursor:pointer;">
+      <label for="settings-rotate-short-links" style="color:rgba(255,255,255,0.8); font-size:12px; cursor:pointer; font-weight:600;">Rotate Short Links per Batch (Col C)</label>
     </div>
 
     <!-- Save Settings -->
@@ -216,11 +237,17 @@ function showBackupStatus(msg, color, bg) {
 function initSettingsUI(settingsPanel, settingsIcon, delayInput, randomizeCheckbox) {
 
   // Load saved settings into the panel
-  chrome.storage.local.get(['settings_delay', 'settings_randomize'], (result) => {
+  chrome.storage.local.get(['settings_delay', 'settings_randomize', 'settings_sheet_url', 'settings_clean_links', 'settings_rotate_short_links'], (result) => {
     const settingsDelay = document.getElementById('settings-delay');
     const settingsRandomize = document.getElementById('settings-randomize');
+    const settingsSheetUrl = document.getElementById('settings-sheet-url');
+    const settingsCleanLinks = document.getElementById('settings-clean-links');
+    const settingsRotateShortLinks = document.getElementById('settings-rotate-short-links');
     if (settingsDelay && result.settings_delay) settingsDelay.value = result.settings_delay;
     if (settingsRandomize && result.settings_randomize !== undefined) settingsRandomize.checked = result.settings_randomize;
+    if (settingsSheetUrl && result.settings_sheet_url) settingsSheetUrl.value = result.settings_sheet_url;
+    if (settingsCleanLinks) settingsCleanLinks.checked = result.settings_clean_links !== false; // default true
+    if (settingsRotateShortLinks) settingsRotateShortLinks.checked = result.settings_rotate_short_links === true; // default false
   });
 
   if (settingsIcon) {
@@ -237,11 +264,20 @@ function initSettingsUI(settingsPanel, settingsIcon, delayInput, randomizeCheckb
   document.getElementById('save-settings-btn').addEventListener('click', () => {
     const delay = parseInt(document.getElementById('settings-delay').value) || 30;
     const randomize = document.getElementById('settings-randomize').checked;
+    const cleanLinks = document.getElementById('settings-clean-links') ? document.getElementById('settings-clean-links').checked : true;
+    const rotateShortLinks = document.getElementById('settings-rotate-short-links') ? document.getElementById('settings-rotate-short-links').checked : false;
+    const sheetUrl = document.getElementById('settings-sheet-url') ? document.getElementById('settings-sheet-url').value.trim() : '';
 
     if (delayInput) delayInput.value = delay;
     if (randomizeCheckbox) randomizeCheckbox.checked = randomize;
 
-    chrome.storage.local.set({ settings_delay: delay, settings_randomize: randomize }, () => {
+    chrome.storage.local.set({ 
+      settings_delay: delay, 
+      settings_randomize: randomize, 
+      settings_sheet_url: sheetUrl, 
+      settings_clean_links: cleanLinks,
+      settings_rotate_short_links: rotateShortLinks
+    }, () => {
       const btn = document.getElementById('save-settings-btn');
       btn.textContent = '✅ Saved!';
       setTimeout(() => {

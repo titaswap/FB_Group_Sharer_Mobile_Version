@@ -16,6 +16,27 @@ var allGroups = [];
 var showingChosenOnly = false;
 
 // ============================================================
+// HELPER: Group Identity Normalization
+// ============================================================
+function normalizeGroupEntry(group) {
+  if (typeof group === 'string') {
+    return { name: group, legacy: true };
+  }
+  return group;
+}
+
+function groupDisplayName(group) {
+  const norm = normalizeGroupEntry(group);
+  if (norm.id && !norm.id.startsWith('group_occurrence_')) {
+    return `${norm.name} (ID: ${norm.id})`;
+  }
+  if (norm.occurrenceIndex !== undefined && norm.occurrenceIndex > 0) {
+    return `${norm.name} (#${norm.occurrenceIndex + 1})`;
+  }
+  return norm.name;
+}
+
+// ============================================================
 // HELPER: Update Count
 // ============================================================
 function updateGroupCount(totalCount) {
@@ -59,11 +80,13 @@ function renderGroups(groups) {
     checkbox.type = 'checkbox';
     checkbox.className = 'group-checkbox styled-checkbox';
     checkbox.id = `group-${index}`;
+    // Store full object safely
+    checkbox.dataset.groupObj = JSON.stringify(group);
     checkbox.value = group.id || group.name;
 
     const label = document.createElement('label');
     label.htmlFor = `group-${index}`;
-    label.textContent = group.name;
+    label.textContent = groupDisplayName(group);
     label.className = 'group-label';
 
     groupItem.appendChild(checkbox);

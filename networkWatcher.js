@@ -59,6 +59,36 @@ function isPageLoading() {
     return false;
 }
 
+// ─── Detect if Facebook page actually rendered content ────────────────────────
+// Catches: blank screen, React hydration fail, Facebook error pages
+function isPageBlankOrBroken() {
+    // Only relevant in FB tab context (not panel)
+    if (IS_PANEL_CONTEXT) return false;
+
+    // 1. Facebook core elements — if none exist, page didn't render
+    const hasFBContent = !!(
+        document.querySelector('#screen-root') ||
+        document.querySelector('[data-pagelet]') ||
+        document.querySelector('[data-mcomponent]') ||
+        document.querySelector('[role="main"]') ||
+        document.querySelector('[role="feed"]') ||
+        document.querySelector('[role="article"]')
+    );
+
+    // 2. Is it an error / "Something went wrong" page?
+    const bodyText = (document.body?.innerText || '').toLowerCase();
+    const isErrorPage =
+        bodyText.includes('something went wrong') ||
+        bodyText.includes('কিছু একটা সমস্যা') ||
+        bodyText.includes("this page isn't available") ||
+        bodyText.includes('page not found');
+
+    // 3. Body completely empty (< 3 children = nothing rendered yet)
+    const isBlank = !document.body || document.body.children.length < 3;
+
+    return !hasFBContent || isErrorPage || isBlank;
+}
+
 // ─── Start watchdog ───────────────────────────────────────────────────────────
 function startNetworkWatchdog() {
     if (_nwInterval) return;
@@ -80,12 +110,17 @@ function startNetworkWatchdog() {
 
         const netStatus = isNetworkSlow();
         const pageLoading = isPageLoading();
+        const pageBlank = isPageBlankOrBroken();
 
         try {
             if (netStatus.slow) {
                 _lastNwFocusTime = now;
                 console.log(`🌐 [NW] Slow/offline network! (${netStatus.reason}) Focusing FB...`);
                 chrome.runtime.sendMessage({ action: 'FOCUS_FB_WINDOW', reason: netStatus.reason }).catch(() => {});
+            } else if (pageBlank) {
+                _lastNwFocusTime = now;
+                console.warn('🕳️ [NW] Page appears blank or broken! Focusing FB to trigger render...');
+                chrome.runtime.sendMessage({ action: 'FOCUS_FB_WINDOW', reason: 'page_not_rendered' }).catch(() => {});
             } else if (pageLoading) {
                 _lastNwFocusTime = now;
                 console.log('⏳ [NW] Page loading spinner detected. Focusing FB...');

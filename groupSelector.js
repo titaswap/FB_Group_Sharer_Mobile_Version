@@ -2,6 +2,27 @@ console.log('✅ [GS-INIT] groupSelector.js loaded!');
 
 let automation_cancelled = false;
 
+// ============================================================
+// HELPER: Group Identity Normalization
+// ============================================================
+function normalizeGroupEntry(group) {
+  if (typeof group === 'string') {
+    return { name: group, legacy: true };
+  }
+  return group;
+}
+
+function groupDisplayName(group) {
+  const norm = normalizeGroupEntry(group);
+  if (norm.id && !norm.id.startsWith('group_occurrence_')) {
+    return `${norm.name} (ID: ${norm.id})`;
+  }
+  if (norm.occurrenceIndex !== undefined && norm.occurrenceIndex > 0) {
+    return `${norm.name} (#${norm.occurrenceIndex + 1})`;
+  }
+  return norm.name;
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'share_to_groups') {
         console.log('📨 [GS-MSG] Received share_to_groups command.', request);
@@ -44,12 +65,14 @@ async function selectGroupsInDOM(groupsToSelect, forwardedGroup) {
         console.warn('⚠️ [GS-DOM] No groups provided. Aborting.');
         return;
     }
+    // Normalize all incoming groups
+    const normalizedGroupsToSelect = groupsToSelect.map(normalizeGroupEntry);
 
     // ✅ SAFETY: Always reset lock at the very start
     automation_cancelled = false;
-    await new Promise(r => chrome.storage.local.set({ 
-        inter_batch_wait: false, 
-        is_automation_running: true 
+    await new Promise(r => chrome.storage.local.set({
+        inter_batch_wait: false,
+        is_automation_running: true
     }, r));
     console.log('🔓 [GS-DOM] Lock cleared. Starting safe.');
 
@@ -117,7 +140,7 @@ async function selectGroupsInDOM(groupsToSelect, forwardedGroup) {
 
     // ─── LAYER 1: CHECKBOX SELECTION ────────────────────────────────────────
     console.log('🔍 [GS-L1] Starting checkbox scan...');
-    let selectedCount = 0;
+    const matchedSavedGroupIndexes = new Set();
 
     const retryCheckboxScan = async (maxRetries = 3) => {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -127,7 +150,6 @@ async function selectGroupsInDOM(groupsToSelect, forwardedGroup) {
 
             if (checkboxes.length > 0) return checkboxes;
 
-            // ✅ Checkbox missing/slow → immediately focus browser, then retry same step
             console.warn(`⚠️ [GS-L1-WARN] No checkboxes found. Focusing browser & retrying in 2s...`);
             chrome.runtime.sendMessage({ action: 'FOCUS_FB_WINDOW', reason: 'checkbox_not_found' });
             await new Promise(r => setTimeout(r, 2000));
@@ -143,45 +165,124 @@ async function selectGroupsInDOM(groupsToSelect, forwardedGroup) {
             if (await isStopped()) throw "cancelled";
 
             const checkboxes = await retryCheckboxScan(3);
-            selectedCount = 0; // reset for this scan pass
+            const domNameOccurrences = {}; // Track occurrences dynamically
 
             for (const box of checkboxes) {
                 if (await isStopped()) throw "cancelled";
 
                 let nameContent = '';
+                let groupUrl = null;
+                let groupId = null;
+
+                // 1. Extract URL/ID from nearby DOM
+                const row = box.closest('div[role="row"]') || box.closest('div.x1i10hfl') || box.parentElement?.parentElement;
+                if (row) {
+                    const link = row.querySelector('a[href*="/groups/"]');
+                    if (link) {
+                        groupUrl = link.href.split('?')[0];
+                        const match = groupUrl.match(/\/groups\/([^/]+)/);
+                        if (match) groupId = match[1];
+                    }
+                }
+
+                // 2. Extract name
                 let parent = box.parentElement;
                 for (let i = 0; i < 5 && parent; i++) {
-                    if (parent.innerText?.trim()) {
-                        const lines = parent.innerText.split('\n').map(l => l.trim()).filter(Boolean);
-                        for (let line of lines) if (!line.match(/checked|selected/i)) { nameContent = line; break; }
+                    const raw = parent.innerText?.trim();
+                    if (raw) {
+                        const lines = raw.split('\n').map(l => l.trim()).filter(l => l && !l.match(/^(checked|selected)$/i));
+                        if (lines.length > 0) {
+                            nameContent = lines.join(' ');
+                        }
                     }
                     if (nameContent) break;
                     parent = parent.parentElement;
                 }
 
-                if (nameContent && groupsToSelect.includes(nameContent)) {
-                    const isChecked = box.checked || box.getAttribute('aria-checked') === 'true';
-                    if (!isChecked) {
-                        console.log(`✅ [GS-L1-MATCH] Selecting: "${nameContent}"`);
-                        await sleep(2, 4, "Matching " + nameContent);
-                        const targetBox = box.closest('div[role="checkbox"]') || box;
-                        smartHighlight(targetBox);
-                        smartClick(targetBox, nameContent);
-                    } else {
-                        console.log(`ℹ️ [GS-L1-SKIP] Already checked: "${nameContent}"`);
+                if (!nameContent) {
+                    nameContent = box.getAttribute('aria-label') || '';
+                }
+                nameContent = nameContent.replace(/Not checked|Checked|Select|Unselect/gi, '').trim();
+
+                if (nameContent) {
+                    // Update DOM occurrence index
+                    domNameOccurrences[nameContent] = (domNameOccurrences[nameContent] || 0) + 1;
+                    const currentOccurrenceIndex = domNameOccurrences[nameContent] - 1;
+
+                    // 3. Matching Strategy
+                    let matchedSavedIndex = -1;
+
+                    for (let j = 0; j < normalizedGroupsToSelect.length; j++) {
+                        if (matchedSavedGroupIndexes.has(j)) continue; // skip already matched
+
+                        const saved = normalizedGroupsToSelect[j];
+
+                        // Strategy A: Exact ID/URL match (Priority)
+                        if (saved.id && groupId && saved.id === groupId) {
+                            matchedSavedIndex = j;
+                            console.log(`✅ [GS-MATCH] Matched by ID: ${groupId} (Name: ${nameContent})`);
+                            break;
+                        }
+                        if (saved.url && groupUrl && saved.url === groupUrl) {
+                            matchedSavedIndex = j;
+                            console.log(`✅ [GS-MATCH] Matched by URL: ${groupUrl} (Name: ${nameContent})`);
+                            break;
+                        }
+
+                        // Strategy B: Name Match + Occurrence Fallback
+                        // Used if real ID/URL is unavailable, or if it's a legacy string preset
+                        const normalizeStr = (s) => (s || "").replace(/\s+/g, ' ').trim();
+                        const normalizedExtracted = normalizeStr(nameContent);
+                        const normalizedSaved = normalizeStr(saved.name);
+
+                        const isNameMatch = (
+                            saved.name === nameContent ||
+                            normalizedSaved === normalizedExtracted ||
+                            normalizedExtracted.includes(normalizedSaved) ||
+                            normalizedSaved.includes(normalizedExtracted)
+                        );
+
+                        if (isNameMatch) {
+                            if (saved.occurrenceIndex !== undefined && saved.occurrenceIndex !== currentOccurrenceIndex) {
+                                continue;
+                            }
+                            matchedSavedIndex = j;
+                            console.log(`✅ [GS-MATCH] Matched by OCCURRENCE FALLBACK: "${saved.name}" (Occurrence: ${currentOccurrenceIndex})`);
+                            break;
+                        }
                     }
-                    selectedCount++;
-                    chrome.runtime.sendMessage({ type: 'selection_progress', current: selectedCount, total: groupsToSelect.length });
+
+                    if (matchedSavedIndex !== -1) {
+                        matchedSavedGroupIndexes.add(matchedSavedIndex);
+                        const matchedSaved = normalizedGroupsToSelect[matchedSavedIndex];
+                        const isChecked = box.checked || box.getAttribute('aria-checked') === 'true';
+
+                        if (!isChecked) {
+                            console.log(`🎯 [GS-L1-SELECT] Selecting: "${groupDisplayName(matchedSaved)}"`);
+                            await sleep(2, 4, "Matching " + matchedSaved.name);
+                            const targetBox = box.closest('div[role="checkbox"]') || box;
+                            smartHighlight(targetBox);
+                            smartClick(targetBox, matchedSaved.name);
+                        } else {
+                            console.log(`ℹ️ [GS-L1-SKIP] Already checked: "${groupDisplayName(matchedSaved)}"`);
+                        }
+
+                        chrome.runtime.sendMessage({
+                            type: 'selection_progress',
+                            current: matchedSavedGroupIndexes.size,
+                            total: normalizedGroupsToSelect.length
+                        });
+                    }
                 }
             }
 
-            console.log(`🎯 [GS-L1-DONE] Pass ${selAttempt}: Selected ${selectedCount}/${groupsToSelect.length} groups.`);
+            console.log(`🎯 [GS-L1-DONE] Pass ${selAttempt}: Selected ${matchedSavedGroupIndexes.size}/${normalizedGroupsToSelect.length} groups.`);
 
             // All target groups found — no need to retry
-            if (selectedCount >= groupsToSelect.length) break;
+            if (matchedSavedGroupIndexes.size >= normalizedGroupsToSelect.length) break;
 
             // Some groups missing → focus browser instantly + retry same step
-            const missing = groupsToSelect.length - selectedCount;
+            const missing = normalizedGroupsToSelect.length - matchedSavedGroupIndexes.size;
             console.warn(`⚠️ [GS-L1-MISS] ${missing} group(s) not found in DOM. Focusing browser & retrying (${selAttempt}/${MAX_SELECTION_RETRIES})...`);
             chrome.runtime.sendMessage({ action: 'FOCUS_FB_WINDOW', reason: 'checkbox_not_found' });
             await new Promise(r => setTimeout(r, 2000));
@@ -448,15 +549,18 @@ async function selectGroupsInDOM(groupsToSelect, forwardedGroup) {
                 smartClick(finalPostBtn, "Final POST");
 
                 // Collect names of groups that were actually matched & selected
-                const selectedGroupNames = groupsToSelect.slice(0, selectedCount);
+                const selectedGroupNames = [];
+                matchedSavedGroupIndexes.forEach(idx => {
+                    selectedGroupNames.push(groupDisplayName(normalizedGroupsToSelect[idx]));
+                });
                 console.log(`📋 [GS-L4-NAMES] Groups shared: ${selectedGroupNames.join(', ')}`);
 
                 chrome.storage.local.set({ inter_batch_wait: true }, () => {
                     console.log("🔒 [GS-L4-LOCK] Inter-batch lock engaged.");
                     setTimeout(() => {
-                        chrome.runtime.sendMessage({ 
+                        chrome.runtime.sendMessage({
                             type: 'batch_post_finished',
-                            groupsShared: selectedCount,
+                            groupsShared: matchedSavedGroupIndexes.size,
                             groupNames: selectedGroupNames
                         });
                         console.log("📨 [GS-L4-MSG] batch_post_finished sent with group names.");

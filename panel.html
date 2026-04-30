@@ -31,9 +31,9 @@
             class="by-logo"></a>
       </div>
       <div class="header-icons">
-        <span id="addressBookIcon" title="Saved Post Templates" class="header-icon star-emoji">📝</span>
+        <span id="addressBookIcon" title="Saved Post Templates" class="header-icon star-emoji" style="display: none;">📝</span>
         <span id="captionManagerIcon" title="Caption Group Manager" class="header-icon star-emoji">📋</span>
-        <span id="oneClickTemplatesIcon" title="1 Click Share Templates" class="header-icon star-emoji">⚡</span>
+        <span id="oneClickTemplatesIcon" title="1 Click Share Templates" class="header-icon star-emoji" style="display: none;">⚡</span>
         <span id="linkManagerIcon" title="Link Manager" class="header-icon star-emoji">🔗</span>
         <span id="groupPresetsIcon" title="Group Presets Manager" class="header-icon star-emoji">📖</span>
         <span id="schedulePresetsIcon" title="Trigger Presets Manager" class="header-icon star-emoji">⏰</span>
@@ -86,21 +86,22 @@
             <!-- Background connecting line -->
             <div style="position:absolute; top:50%; left:20px; right:20px; height:2px; background:rgba(255,255,255,0.05); z-index:1; transform:translateY(-50%);"></div>
             
-            <div class="step-node active" id="node-nav" title="Navigate" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.4s;">🔗</div>
-            <div class="step-node" id="node-stab" title="Stabilize" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.4s;">🌊</div>
-            <div class="step-node" id="node-menu" title="Menu" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.4s;">📜</div>
-            <div class="step-node" id="node-select" title="Select" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.4s;">✅</div>
-            <div class="step-node" id="node-save" title="Save" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.4s;">💾</div>
-            <div class="step-node" id="node-post" title="Post" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.4s;">🚀</div>
+            <div class="step-node active" id="node-nav" title="Navigate" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:border-color 0.4s, background-color 0.4s, color 0.4s;">🔗</div>
+            <div class="step-node" id="node-stab" title="Stabilize" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:border-color 0.4s, background-color 0.4s, color 0.4s;">🌊</div>
+            <div class="step-node" id="node-menu" title="Menu" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:border-color 0.4s, background-color 0.4s, color 0.4s;">📜</div>
+            <div class="step-node" id="node-select" title="Select" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:border-color 0.4s, background-color 0.4s, color 0.4s;">✅</div>
+            <div class="step-node" id="node-save" title="Save" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:border-color 0.4s, background-color 0.4s, color 0.4s;">💾</div>
+            <div class="step-node" id="node-post" title="Post" style="position:relative; z-index:2; width:30px; height:30px; border-radius:50%; background:#0d1117; border:2px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:12px; transition:border-color 0.4s, background-color 0.4s, color 0.4s;">🚀</div>
             
             <style>
-                .status-indicator.is-running .status-dot { background: #4ade80; box-shadow: 0 0 10px rgba(74,222,128,0.5); animation: pulse-green 2s infinite; }
-                .status-indicator.is-armed .status-dot { background: #1eb2ff; box-shadow: 0 0 10px rgba(30,178,255,0.5); animation: pulse-blue 2s infinite; }
+                .status-indicator.is-running .status-dot { background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.5); animation: pulse-green 2s infinite; will-change: transform, opacity; }
+                .status-indicator.is-armed .status-dot { background: #1eb2ff; box-shadow: 0 0 8px rgba(30,178,255,0.5); animation: pulse-blue 2s infinite; will-change: transform, opacity; }
                 .status-indicator.is-running .status-text { color: #4ade80; }
                 .status-indicator.is-armed .status-text { color: #1eb2ff; font-weight:800; letter-spacing:0.5px; }
 
-                @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.4); } 70% { box-shadow: 0 0 0 10px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
-                @keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(30,178,255,0.4); } 70% { box-shadow: 0 0 0 10px rgba(30,178,255,0); } 100% { box-shadow: 0 0 0 0 rgba(30,178,255,0); } }
+                /* ✅ CPU FIX: replaced box-shadow ripple (CPU paint) with opacity+scale (GPU compositor) */
+                @keyframes pulse-green { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: 0.55; } }
+                @keyframes pulse-blue  { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: 0.55; } }
                 .step-node.active { border-color: #1eb2ff !important; box-shadow: 0 0 15px rgba(30,178,255,0.3); background: rgba(30,178,255,0.1) !important; color: #fff !important; }
                 .step-node.completed { border-color: #00ff88 !important; background: rgba(0,255,136,0.15) !important; color: #00ff88 !important; }
             </style>
@@ -210,7 +211,7 @@
                 
                 <div style="display:flex; align-items:center; gap:5px; background:rgba(30,178,255,0.05); padding:4px 8px; border-radius:10px; border:1px solid rgba(30,178,255,0.15);">
                     <div style="display:flex; align-items:center; gap:3px;">
-                        <input type="number" id="batch-delay-min" value="0" min="0" max="60" style="
+                        <input type="number" id="batch-delay-min" value="1" min="0" max="60" style="
                             width:35px; background:rgba(0,12,35,0.7); border:1px solid rgba(30,178,255,0.4);
                             color:#fff; font-weight:700; text-align:center; padding:5px; border-radius:6px;
                             outline:none; font-size:12px;
@@ -226,6 +227,42 @@
                         <span style="color:rgba(255,255,255,0.5); font-size:11px; font-weight:700;">s</span>
                     </div>
                 </div>
+            </div>
+
+            <!-- New Tab Mode Toggle Row -->
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.05); padding-top:10px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:16px;">🔄</span>
+                    <div>
+                        <div style="color:#fff; font-size:12px; font-weight:700;">New Tab Mode</div>
+                        <div style="color:rgba(255,255,255,0.4); font-size:9px;">প্রতি batch-এ নতুন ট্যাব ওপেন → কাজ → ক্লোজ</div>
+                    </div>
+                </div>
+                <!-- Toggle Switch -->
+                <label id="tab-auto-mode-label" title="ON করলে প্রতি batch-এ নতুন ট্যাব ওপেন হবে, কাজ শেষে ক্লোজ হবে" style="display:flex; align-items:center; cursor:pointer; gap:8px;">
+                    <div style="position:relative; width:40px; height:22px;">
+                        <input type="checkbox" id="tab-auto-mode-toggle" style="opacity:0; width:0; height:0; position:absolute;">
+                        <span id="tab-auto-mode-slider" style="
+                            position:absolute; cursor:pointer;
+                            top:0; left:0; right:0; bottom:0;
+                            background:rgba(255,255,255,0.1);
+                            border:1px solid rgba(255,255,255,0.15);
+                            border-radius:22px;
+                            transition: background 0.3s, border-color 0.3s;
+                        ">
+                            <span id="tab-auto-mode-knob" style="
+                                position:absolute; content:'';
+                                height:16px; width:16px;
+                                left:2px; bottom:2px;
+                                background:#9ca3af;
+                                border-radius:50%;
+                                transition: transform 0.3s, background 0.3s;
+                                display:block;
+                            "></span>
+                        </span>
+                    </div>
+                    <span id="tab-auto-mode-status" style="color:rgba(255,255,255,0.4); font-size:10px; font-weight:700;">OFF</span>
+                </label>
             </div>
         </div>
 
@@ -261,7 +298,7 @@
                             cursor:pointer; font-weight:600;
                         ">
                             <option value="seconds">Seconds</option>
-                            <option value="minutes">Minutes</option>
+                            <option value="minutes" selected>Minutes</option>
                             <option value="hours">Hours</option>
                             <option value="days">Days</option>
                         </select>
@@ -269,13 +306,26 @@
 
                      <!-- Value Input -->
                      <div style="display:flex; flex-direction:column; gap:5px;">
-                        <label id="schedule-interval-label" style="color:rgba(255,255,255,0.4); font-size:10px; font-weight:700;">MINUTES BETWEEN TRIGGERS</label>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label id="schedule-interval-label" style="color:rgba(255,255,255,0.4); font-size:10px; font-weight:700;">MINUTES BETWEEN TRIGGERS</label>
+                            <label style="color:#00d4ff; font-size:10px; font-weight:700; display:flex; align-items:center; gap:4px; cursor:pointer;">
+                                <input type="checkbox" id="schedule-randomize" class="styled-checkbox" checked> Random
+                            </label>
+                        </div>
                         <div style="display:flex; align-items:center; gap:10px;">
                             <input type="number" id="schedule-interval-value" value="30" min="1" max="1440" style="
                                 flex:1; background:rgba(0,12,35,0.9); border:1px solid rgba(0,212,255,0.4); 
                                 color:#1eb2ff; padding:8px; border-radius:10px; outline:none; font-size:13px;
                                 font-weight:800; text-align:center; box-shadow:0 0 10px rgba(0,212,255,0.05);
                             ">
+                            <div id="schedule-interval-max-container" style="display:none; align-items:center; gap:10px; flex:1;">
+                                <span style="color:rgba(255,255,255,0.4); font-size:12px; font-weight:bold;">to</span>
+                                <input type="number" id="schedule-interval-max-value" value="50" min="1" max="1440" style="
+                                    flex:1; background:rgba(0,12,35,0.9); border:1px solid rgba(0,212,255,0.4); 
+                                    color:#1eb2ff; padding:8px; border-radius:10px; outline:none; font-size:13px;
+                                    font-weight:800; text-align:center; box-shadow:0 0 10px rgba(0,212,255,0.05); width:100%;
+                                ">
+                            </div>
                             <span id="save-trigger-preset-btn" title="Save this schedule pattern" style="
                                 cursor:pointer; font-size:16px; color:#1eb2ff; background:rgba(30,178,255,0.1); 
                                 padding:8px; border-radius:10px; border:1px solid rgba(30,178,255,0.25); 
@@ -336,7 +386,7 @@
         <input type="text" id="post-link-to-visit" placeholder="https://www.facebook.com/groups/..."
           style="width:100%; padding:10px; border:1px solid rgba(30,178,255,0.3); border-radius:8px; background:rgba(0,12,35,0.6); color:#fff; font-size:13px; margin-bottom:10px; box-sizing:border-box;">
         <div style="display:flex; gap:8px; align-items:stretch; margin-top:5px;">
-          <button id="visit-link-btn" class="primary" style="flex:1; padding: 12px; border-radius: 12px; font-weight: 800; cursor: pointer; font-size: 13px;">🚀 Activate Trigger</button>
+          <button id="visit-link-btn" class="primary" style="flex:1; padding: 12px; border-radius: 12px; font-weight: 800; cursor: pointer; font-size: 13px;">🚀 Start Auto Share</button>
           <button id="save-workflow-btn" title="Save entire setup as a Workflow Preset" style="
               width:44px; min-height:42px; background:rgba(30,178,255,0.1); border:1px solid rgba(30,178,255,0.3);
               color:#1eb2ff; border-radius:12px; cursor:pointer; font-size:18px;
@@ -352,7 +402,7 @@
 
 
       <!-- Message Section -->
-      <div class="message-composer">
+      <div class="message-composer" style="display: none;">
         <div class="step-header">
           <span class="step-number">Step 1</span>
           <div class="step-content">
@@ -411,7 +461,7 @@
       </div>
 
       <!-- Group Selection Section -->
-      <div class="groups-section">
+      <div class="groups-section" style="display: none;">
         <div class="step-header">
           <span class="step-number">Step 2</span>
           <div class="step-content">
@@ -463,10 +513,10 @@
       </div>
 
       <!-- Step 3: Share Settings and Button -->
-      <div class="share-settings-section">
+      <div class="share-settings-section" style="display: none;">
         <div class="step-header">
-          <span class="step-number">Step 3</span>
-          <div class="step-content">
+           <span class="step-number">Step 3</span>
+           <div class="step-content">
             <h3 class="section-subtitle">Configure and Share</h3>
           </div>
         </div>
@@ -581,7 +631,11 @@
               <label style="color:rgba(255,255,255,0.7); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Bulk Paste (Line by Line)</label>
               <textarea id="caption-bulk-textarea" placeholder="Paste your multiple captions here..." style="width:100%; height:80px; border:1px solid rgba(30,178,255,0.3); background:rgba(0,12,35,0.7); color:#fff; padding:8px; border-radius:8px; margin-top:4px; font-size:11px; box-sizing:border-box; outline:none; resize:none; font-family:inherit; line-height:1.4;"></textarea>
            </div>
-           <button id="import-captions-btn" style="width:100%; background:linear-gradient(135deg,#1eb2ff 0%,#00d4ff 100%); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; font-size:12px; cursor:pointer; box-shadow:0 4px 10px rgba(30,178,255,0.25); transition:all 0.2s;">📥 Import to Group</button>
+           
+           <div style="display:flex; gap:8px;">
+               <button id="import-captions-btn" style="flex:1; background:linear-gradient(135deg,#1eb2ff 0%,#00d4ff 100%); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; font-size:12px; cursor:pointer; box-shadow:0 4px 10px rgba(30,178,255,0.25); transition:all 0.2s;">📥 Import Manual</button>
+               <button id="fetch-sheet-captions-btn" style="flex:1; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; font-size:12px; cursor:pointer; box-shadow:0 4px 10px rgba(16, 185, 129, 0.25); transition:all 0.2s;">🌐 Fetch Sheet</button>
+           </div>
         </div>
       </div>
 
@@ -1001,9 +1055,15 @@
           <label style="color:#1eb2ff; font-size:13px; font-weight:600; margin-bottom:6px; display:block;">Paste Links Here</label>
           <textarea id="preset-links-input" placeholder="https://www.facebook.com/groups/probashisamiamoni
 https://www.facebook.com/groups/482869857320012/" style="width:100%; height:80px; background:rgba(0,12,35,0.6); border:1px solid rgba(30,178,255,0.3); border-radius:8px; color:#fff; padding:10px; font-size:12px; resize:vertical; box-sizing:border-box;"></textarea>
-          <button id="fetch-preset-links-btn" style="width:100%; background:linear-gradient(135deg,#9c27b0 0%,#e91e63 100%); border:none; color:#fff; padding:8px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; margin-top:10px; box-shadow:0 3px 10px rgba(156,39,176,0.3);">
-            ✨ Extract Group Names
-          </button>
+          
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button id="fetch-preset-links-btn" style="flex:1; background:linear-gradient(135deg,#9c27b0 0%,#e91e63 100%); border:none; color:#fff; padding:8px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 3px 10px rgba(156,39,176,0.3);">
+              ✨ Extract Group Names
+            </button>
+            <button id="fetch-sheet-preset-btn" style="flex:1; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; border:none; padding:8px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 3px 10px rgba(16, 185, 129, 0.3); transition:all 0.2s;">
+              🌐 Fetch via Sheet
+            </button>
+          </div>
         </div>
 
         <div id="preset-scraped-names-container" class="hidden" style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px;">
@@ -1012,8 +1072,8 @@ https://www.facebook.com/groups/482869857320012/" style="width:100%; height:80px
             <span id="extraction-summary-text" style="font-size:11px; color:#9ca3af;">0/0 Extracted</span>
           </div>
           <div style="max-height: 150px; overflow-y: auto; background: rgba(0,12,35,0.6); border: 1px solid rgba(74,222,128,0.3); border-radius: 8px;">
-            <table style="width:100%; border-collapse: collapse; text-align: left;">
-              <thead>
+            <table id="preset-dynamic-table" style="width:100%; border-collapse: collapse; text-align: left;">
+              <thead id="preset-dynamic-thead">
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(74,222,128,0.1);">
                   <th style="padding: 6px 10px; font-size: 11px; color: #4ade80; font-weight: 600; width: 30%">Link info</th>
                   <th style="padding: 6px 10px; font-size: 11px; color: #4ade80; font-weight: 600; width: 70%">Editable Name</th>
@@ -1235,13 +1295,20 @@ https://www.facebook.com/groups/482869857320012/" style="width:100%; height:80px
     <script src="one_click_templates.js"></script>
     <script src="links-manager.js"></script>
     <script src="captionManager.js"></script>
+    <script src="js/googleSheetFetcher.js"></script>
     <!-- NEW: Panel module split files (must load BEFORE panel.js) -->
     <script src="js/panel/panel_utils.js"></script>
     <script src="js/panel/panel_groups_ui.js"></script>
     <script src="js/panel/panel_presets.js"></script>
+    <!-- Tab Auto Open/Close Manager (load before panel_automation.js) -->
+    <script src="tab_automation_manager.js"></script>
+    <script src="js/batch_link_rotator.js"></script>
     <script src="js/panel/panel_automation.js"></script>
     <script src="js/panel/panel_settings.js"></script>
     <script src="js/panel/panel_triggers_log.js"></script>
+    <!-- Multi-Link Rotator + Remote Sheet Control (load before panel.js) -->
+    <script src="remote-link-controller.js"></script>
+    <script src="multi-link-rotator.js"></script>
     <!-- Core panel (DOMContentLoaded entry — loads LAST) -->
     <script src="panel.js"></script>
     <script src="windowFocusManager.js"></script>

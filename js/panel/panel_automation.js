@@ -317,14 +317,14 @@ function jumpToNextBatch() {
 
   setTimeout(() => {
     try {
-      chrome.storage.local.get(['all_batches', 'current_batch_index', 'current_post_url', 'is_automation_running'], (res) => {
+      chrome.storage.local.get(['all_batches', 'current_batch_index', 'current_post_url', 'is_automation_running'], async (res) => {
         // Note: We ignore res.is_automation_running here to force skip if requested
         
         const batches = res.all_batches || [];
         const rawIndex = res.current_batch_index;
         const currentIndex = (rawIndex === undefined || rawIndex === null) ? 0 : parseInt(rawIndex);
         const nextIndex = currentIndex + 1;
-        const url = res.current_post_url;
+        const url = typeof getNextBatchUrl === 'function' ? await getNextBatchUrl(res.current_post_url, nextIndex) : res.current_post_url;
 
         console.log(`Manual Skip Logic: From ${currentIndex} to ${nextIndex}. Total Batches: ${batches.length}`);
 
@@ -396,12 +396,24 @@ function jumpToNextBatch() {
 let fbNetworkWatchdogTimer = null;
 let lastFbNetworkActivity = Date.now();
 
+// ✅ CPU FIX: Local cache — avoids storage read when automation is clearly idle.
+// Set to true only when a batch is actively running on the Facebook tab.
+// Reset when automation finishes, is stopped, or trigger is just armed (waiting).
+let _automationActiveCache = false;
+
 function initAutomationListeners() {
   const skipBatchBtn = document.getElementById('skip-batch-btn');
 
   // ── Watchdog: Catch Dead/Frozen Tabs (ERR_TOO_MANY_REDIRECTS) ──
+  // ✅ CPU FIX: Guard with _automationActiveCache so storage is NEVER read when
+  // trigger is just armed/waiting. Storage read only happens during active batch execution.
   if (fbNetworkWatchdogTimer) clearInterval(fbNetworkWatchdogTimer);
   fbNetworkWatchdogTimer = setInterval(() => {
+     // FAST PATH: skip storage I/O entirely when we know automation isn't running
+     if (!_automationActiveCache) {
+         lastFbNetworkActivity = Date.now(); // keep resetting while idle
+         return;
+     }
      chrome.storage.local.get(['is_automation_running', 'inter_batch_wait', 'current_post_url'], (res) => {
          if (res.is_automation_running === true && res.inter_batch_wait === false) {
              const idleTime = Date.now() - lastFbNetworkActivity;
@@ -416,8 +428,22 @@ function initAutomationListeners() {
                      const tabIdFromUrl = getTargetTabId();
                      const doRetry = (tabId) => {
                          if (!tabId) return;
-                         console.log("🔄 Watchdog reloading tab:", tabId);
-                         chrome.tabs.update(tabId, { url: res.current_post_url, active: true });
+                                                   // Validate tab before update — prevents "No tab with id" errors
+                          chrome.tabs.get(tabId, (tab) => {
+                              if (chrome.runtime.lastError || !tab) {
+                                  console.warn("[WATCHDOG] Tab gone. Using provideActiveTab fallback.");
+                                  if (typeof provideActiveTab === "function") provideActiveTab((freshId) => {
+                                      if (freshId) chrome.tabs.update(freshId, { url: res.current_post_url, active: true }, () => {
+                                          if (chrome.runtime.lastError) {}
+                                      });
+                                  });
+                                  return;
+                              }
+                              console.log("🔄 Watchdog reloading tab:", tabId);
+                              chrome.tabs.update(tabId, { url: res.current_post_url, active: true }, () => {
+                                  if (chrome.runtime.lastError) {}
+                              });
+                          });
                      };
                      
                      if (tabIdFromUrl) {
@@ -436,6 +462,8 @@ function initAutomationListeners() {
              }
          } else {
              lastFbNetworkActivity = Date.now(); // keep resetting while idle or waiting
+             // If storage says not running, sync our cache
+             if (res.is_automation_running === false) _automationActiveCache = false;
          }
      });
   }, 5000);
@@ -445,6 +473,7 @@ function initAutomationListeners() {
     // Reset watchdog on ANY automation message from the Facebook tab
     if (['progress_log', 'task_countdown', 'post_result', 'batch_post_finished'].includes(msg.type)) {
         lastFbNetworkActivity = Date.now();
+        _automationActiveCache = true; // ✅ CPU FIX: automation IS running right now
     }
 
     if (msg.type === 'progress_log') {
@@ -529,7 +558,7 @@ function initAutomationListeners() {
        });
        
 
-       chrome.storage.local.get(['all_batches', 'current_batch_index', 'current_post_url', 'is_automation_running', 'current_batch_delay', 'groups_processed_so_far', 'total_groups_count'], (res) => {
+       chrome.storage.local.get(['all_batches', 'current_batch_index', 'current_post_url', 'is_automation_running', 'current_batch_delay', 'groups_processed_so_far', 'total_groups_count'], async (res) => {
           // EMERGENCY STOP: Don't move to next batch if user stopped
           if (res.is_automation_running === false) {
              console.log("🛑 Automation Halt: Stopping batch transition because 'STOP' was pressed.");
@@ -542,9 +571,9 @@ function initAutomationListeners() {
 
           const batches = res.all_batches || [];
           const currentIndex = res.current_batch_index || 0;
-          const url = res.current_post_url;
-          const userDelay = res.current_batch_delay || 30; 
           const nextIndex = currentIndex + 1;
+          const url = typeof getNextBatchUrl === 'function' ? await getNextBatchUrl(res.current_post_url, nextIndex) : res.current_post_url;
+          const userDelay = res.current_batch_delay || 30; 
 
 
           if (nextIndex < batches.length) {
@@ -594,6 +623,19 @@ function initAutomationListeners() {
                provideActiveTab((t) => _sendStopThenFocus(t));
              }
 
+             // ── NEW TAB MODE: batch শেষে ট্যাব close করো ──────────────────────
+             if (typeof TabAutomationManager !== 'undefined') {
+               TabAutomationManager.isEnabled((tabModeOn) => {
+                 if (tabModeOn) {
+                   console.log('🔄 [TAB-MODE] Batch শেষ। ম্যানেজড ট্যাব close করা হচ্ছে...');
+                   TabAutomationManager.closeTab(() => {
+                     console.log('🗑️ [TAB-MODE] ট্যাব closed. পরবর্তী batch-এর জন্য অপেক্ষা করা হচ্ছে...');
+                   });
+                 }
+               });
+             }
+             // ──────────────────────────────────────────────────────
+
                // LIVE COUNTDOWN TIMER for Batch Transition
                let remBatchTime = Math.round(finalDelay);
                
@@ -601,27 +643,29 @@ function initAutomationListeners() {
                if (activeBatchWaitTimer) { clearTimeout(activeBatchWaitTimer); activeBatchWaitTimer = null; }
                if (activeBatchWaitInterval) { clearInterval(activeBatchWaitInterval); activeBatchWaitInterval = null; }
 
+               // ✅ CPU FIX: Use a local flag instead of storage reads every second.
+               // The flag is cleared by executeStopAutomation or jumpToNextBatch.
+               // This replaces: chrome.storage.local.get(['inter_batch_wait'], ...) every 1s
+               let _batchWaitActive = true;
+
                activeBatchWaitInterval = setInterval(() => {
                   // ZOMBIE CHECK: Stop ONLY if user explicitly pressed STOP.
-                  // Check inter_batch_wait (panel-owned flag) NOT is_automation_running
-                  // because pause_for_batch_wait intentionally leaves is_automation_running
-                  // untouched, and any FB tab script could set it false accidentally.
-                  chrome.storage.local.get(['inter_batch_wait'], (status) => {
-                      if (status.inter_batch_wait === false) {
-                          // Panel cleared this → user pressed STOP or campaign ended
-                          clearInterval(activeBatchWaitInterval);
-                          activeBatchWaitInterval = null;
-                          return;
-                      }
+                  // _batchWaitActive is cleared by executeStopAutomation (sets _automationActiveCache=false)
+                  // and by activeBatchWaitTimer completion below.
+                  if (!_batchWaitActive) {
+                      clearInterval(activeBatchWaitInterval);
+                      activeBatchWaitInterval = null;
+                      return;
+                  }
 
-                      remBatchTime--;
-                      if (remBatchTime > 0) {
-                          updateUIProgress(res.groups_processed_so_far, res.total_groups_count, currentIndex + 1, batches.length, `Waiting ${remBatchTime}s for next batch...`);
-                      } else {
-                          clearInterval(activeBatchWaitInterval);
-                          activeBatchWaitInterval = null;
-                      }
-                  });
+                  remBatchTime--;
+                  if (remBatchTime > 0) {
+                      updateUIProgress(res.groups_processed_so_far, res.total_groups_count, currentIndex + 1, batches.length, `Waiting ${remBatchTime}s for next batch...`);
+                  } else {
+                      _batchWaitActive = false;
+                      clearInterval(activeBatchWaitInterval);
+                      activeBatchWaitInterval = null;
+                  }
                }, 1000);
  
                activeBatchWaitTimer = setTimeout(() => {
@@ -648,46 +692,82 @@ function initAutomationListeners() {
 
                         const tabIdFromUrl = getTargetTabId();
 
-                        const doNextBatch = (targetTabId) => {
-                            if (!targetTabId) {
-                                showCustomAlert("Tab Lost", "No Facebook tab found. Automation halted.", "🛑");
-                                chrome.storage.local.set({ is_automation_running: false });
-                                updateSignalStatus(false);
-                                return;
-                            }
-                            chrome.tabs.get(targetTabId, (ctab) => {
-                               if (chrome.runtime.lastError || !ctab) {
-                                  showCustomAlert("Tab Lost", "Target tab closed. Automation halted.", "🛑");
-                                  chrome.storage.local.set({ is_automation_running: false });
-                                  updateSignalStatus(false);
-                                  return;
+                         // ── NEW TAB MODE: next batch open/navigate ─────────────────
+                         const _doNextBatchNav = (targetTabId) => {
+                             if (!targetTabId) {
+                                 showCustomAlert("Tab Lost", "No Facebook tab found. Automation halted.", "🛑");
+                                 chrome.storage.local.set({ is_automation_running: false });
+                                 updateSignalStatus(false);
+                                 return;
+                             }
+                             chrome.tabs.get(targetTabId, (ctab) => {
+                                if (chrome.runtime.lastError || !ctab) {
+                                   showCustomAlert("Tab Lost", "Target tab closed. Automation halted.", "🛑");
+                                   chrome.storage.local.set({ is_automation_running: false });
+                                   updateSignalStatus(false);
+                                   return;
+                                }
+                                document.querySelectorAll('.step-node').forEach(node => {
+                                    node.classList.remove('active', 'completed');
+                                });
+                                document.getElementById('node-nav')?.classList.add('active');
+                                chrome.tabs.update(targetTabId, { url: url, active: true });
+                                chrome.windows.update(ctab.windowId, { focused: true, drawAttention: true });
+                             });
+                         };
+
+                         const _openNewTabForNextBatch = () => {
+                             document.querySelectorAll('.step-node').forEach(node => {
+                                 node.classList.remove('active', 'completed');
+                             });
+                             document.getElementById('node-nav')?.classList.add('active');
+                             TabAutomationManager.openTab(url, (newTabId) => {
+                                 console.log(`🆕 [TAB-MODE] Batch ${nextIndex + 1} এর জন্য নতুন ট্যাব opened: ${newTabId}`);
+                             });
+                         };
+
+                         if (typeof TabAutomationManager !== 'undefined') {
+                           TabAutomationManager.isEnabled((tabModeOn) => {
+                             if (tabModeOn) {
+                               // New Tab Mode → নতুন ট্যাব ওপেন করো
+                               _openNewTabForNextBatch();
+                             } else {
+                               // Normal Mode → existing tab navigate করো
+                               if (tabIdFromUrl) {
+                                   _doNextBatchNav(tabIdFromUrl);
+                               } else {
+                                   provideActiveTab((tabId) => _doNextBatchNav(tabId));
                                }
-
-                               // --- RESET UI FOR NEW BATCH ---
-                               document.querySelectorAll('.step-node').forEach(node => {
-                                   node.classList.remove('active', 'completed');
-                               });
-                               document.getElementById('node-nav')?.classList.add('active');
-
-                               chrome.tabs.update(targetTabId, { url: url, active: true });
-                               chrome.windows.update(ctab.windowId, { focused: true, drawAttention: true });
-                            });
-                        };
-
-                        if (tabIdFromUrl) {
-                            doNextBatch(tabIdFromUrl);
-                        } else {
-                            // Schedule flow: find the active Facebook tab
-                            provideActiveTab((tabId) => doNextBatch(tabId));
-                        }
-                    });
-                 });
+                             }
+                           });
+                         } else {
+                           // Fallback: TabAutomationManager না থাকলে
+                           if (tabIdFromUrl) {
+                               _doNextBatchNav(tabIdFromUrl);
+                           } else {
+                               provideActiveTab((tabId) => _doNextBatchNav(tabId));
+                           }
+                         }
+                         // ────────────────────────────────────────────────────────
+                     });
+                  });
               }, finalDelay * 1000);
           } else {
              console.log("✨ All batches finished successfully!");
              chrome.storage.local.set({ is_automation_running: false, auto_trigger_share: false });
              updateSignalStatus(false);
              updateUIProgress(res.total_groups_count, res.total_groups_count, batches.length, batches.length, "All Batches Finished!");
+
+             // ── NEW TAB MODE: সব শেষে ট্যাব close করো ───────────────────────
+             if (typeof TabAutomationManager !== 'undefined') {
+               TabAutomationManager.isEnabled((tabModeOn) => {
+                 if (tabModeOn) {
+                   console.log('🏁 [TAB-MODE] সব batch শেষ। শেষ ম্যানেজড ট্যাব close করা হচ্ছে...');
+                   TabAutomationManager.closeTab();
+                 }
+               });
+             }
+             // ──────────────────────────────────────────────────────
 
              // ✅ CRITICAL: Stop FB tab's networkWatcher FIRST, then focus panel.
              // Race condition fix: if we focus panel BEFORE stop_automation reaches FB tab,
@@ -701,13 +781,11 @@ function initAutomationListeners() {
 
              const fbTabId = getTargetTabId();
              if (fbTabId) {
-                 // Manual flow: tab ID known — send stop, focus panel in callback
                  chrome.tabs.sendMessage(fbTabId, { type: 'stop_automation' }, () => {
-                     if (chrome.runtime.lastError) {} // tab might be gone
+                     if (chrome.runtime.lastError) {}
                      finalizeDone();
                  });
              } else {
-                 // Schedule flow: find active FB tab via provideActiveTab
                  provideActiveTab(t => {
                      if (t) {
                          chrome.tabs.sendMessage(t, { type: 'stop_automation' }, () => {
@@ -715,7 +793,7 @@ function initAutomationListeners() {
                              finalizeDone();
                          });
                      } else {
-                         finalizeDone(); // no FB tab found, focus panel anyway
+                         finalizeDone();
                      }
                  });
              }
@@ -727,8 +805,10 @@ function initAutomationListeners() {
 
      // New: Handle Batch Retry Request from autoClickGroup.js
      if (msg.type === 'batch_retry_requested') {
-         chrome.storage.local.get(['current_batch_index', 'current_post_url', 'is_automation_running'], (res) => {
+         chrome.storage.local.get(['current_batch_index', 'current_post_url', 'is_automation_running'], async (res) => {
             if (!res.is_automation_running) return;
+
+            const url = typeof getNextBatchUrl === 'function' ? await getNextBatchUrl(res.current_post_url, res.current_batch_index || 0) : res.current_post_url;
 
             if (currentBatchRetries < 2) {
                 currentBatchRetries++;
@@ -742,9 +822,23 @@ function initAutomationListeners() {
                         console.warn('⚠️ [RETRY] No tab found for retry. Skipping.');
                         return;
                     }
-                    chrome.tabs.update(tabId, { url: res.current_post_url, active: true });
+                    // Validate tab before update — prevents "No tab with id" errors
                     chrome.tabs.get(tabId, (tab) => {
-                        if (tab && tab.windowId) chrome.windows.update(tab.windowId, { focused: true, drawAttention: true });
+                        if (chrome.runtime.lastError || !tab) {
+                            console.warn('[RETRY] Tab gone — using provideActiveTab fallback.');
+                            provideActiveTab((freshId) => {
+                                if (freshId) chrome.tabs.update(freshId, { url: url, active: true }, () => {
+                                    if (chrome.runtime.lastError) {}
+                                });
+                            });
+                            return;
+                        }
+                        chrome.tabs.update(tabId, { url: url, active: true }, () => {
+                            if (chrome.runtime.lastError) {}
+                        });
+                        if (tab.windowId) chrome.windows.update(tab.windowId, { focused: true, drawAttention: true }, () => {
+                            if (chrome.runtime.lastError) {}
+                        });
                     });
                 };
 
@@ -822,6 +916,7 @@ function initAutomationListeners() {
 
   // ── Stop Automation Button & Logic ────────────────────────
   const executeStopAutomation = (showAlert = true) => {
+      _automationActiveCache = false; // ✅ CPU FIX: watchdog skips storage reads immediately
       chrome.storage.local.set({ is_automation_running: false, auto_trigger_share: false, inter_batch_wait: false }, () => {
         updateSignalStatus(false);
         const targetTabId = getTargetTabId();
@@ -861,6 +956,17 @@ function initAutomationListeners() {
             skipBatchBtn.style.opacity = '1';
         }
 
+        // ── NEW TAB MODE: stop হলে ম্যানেজড ট্যাব close করো ────
+        if (typeof TabAutomationManager !== 'undefined') {
+          TabAutomationManager.isEnabled((tabModeOn) => {
+            if (tabModeOn) {
+              console.log('🛑 [TAB-MODE] Stop চাপা হয়েছে। ম্যানেজড ট্যাব reset করা হচ্ছে...');
+              TabAutomationManager.reset();
+            }
+          });
+        }
+        // ──────────────────────────────────────────────────────
+
         if (showAlert) showCustomAlert("System Stopped", "All automation tasks have been halted.", "🛑");
       });
   };
@@ -881,6 +987,8 @@ function initAutomationListeners() {
   // ── Status Update Listener ─────────────────────────────────
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'status_update') {
+      // ✅ CPU FIX: Keep watchdog cache in sync with actual automation state
+      _automationActiveCache = !!message.running;
       updateSignalStatus(message.running);
       
       // RESET UI NODES ON NEW CAMPAIGN START (Triggered by alarm)

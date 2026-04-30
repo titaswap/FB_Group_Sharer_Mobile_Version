@@ -216,13 +216,12 @@ function renderCaptionTable() {
         groupEntries.forEach(([groupName, caps], index) => {
             const unusedCount = caps.filter(c => !c.used).length;
             const safeGroupId = `group-content-${index}`;
-            const isFirst = index === 0;
             
             html += `
                 <div class="caption-accordion-item" style="margin-bottom:10px; border:1px solid rgba(255,255,255,0.05); border-radius:12px; overflow:hidden; background:rgba(0,0,0,0.15);">
-                    <div class="caption-group-header" data-target="${safeGroupId}" style="background:${isFirst ? 'rgba(30,178,255,0.15)' : 'rgba(30,178,255,0.08)'}; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition:all 0.2s; user-select:none;">
+                    <div class="caption-group-header" data-target="${safeGroupId}" style="background:rgba(30,178,255,0.08); padding:10px 12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition:all 0.2s; user-select:none;">
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <span class="folder-icon" style="font-size:16px; transition:transform 0.3s; transform:${isFirst ? 'scale(1.2)' : 'scale(1)'};">📁</span>
+                            <span class="folder-icon" style="font-size:16px; transition:transform 0.3s; transform:scale(1);">📁</span>
                             <div style="display:flex; flex-direction:column;">
                                 <span style="color:#1eb2ff; font-weight:800; font-size:13px; letter-spacing:0.3px;">${groupName}</span>
                                 <span style="color:rgba(255,255,255,0.4); font-size:10px;">${unusedCount}/${caps.length} Unused</span>
@@ -231,11 +230,11 @@ function renderCaptionTable() {
                         <div style="display:flex; align-items:center; gap:6px;">
                             <button class="reset-group-btn" data-group="${groupName}" title="Mark all captions as Unused (Ready)" style="background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3); color:#fbbf24; font-size:9px; cursor:pointer; font-weight:800; padding:4px 7px; border-radius:6px; transition:all 0.2s;">🔄 Reset</button>
                             <button class="delete-group-btn" data-group="${groupName}" title="Delete entire group" style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); color:#f87171; font-size:9px; cursor:pointer; font-weight:800; padding:4px 7px; border-radius:6px; transition:all 0.2s;">🗑️ Delete</button>
-                            <span class="chevron-icon" style="color:rgba(255,255,255,0.3); font-size:10px; transition:transform 0.3s; transform:${isFirst ? 'rotate(180deg)' : 'rotate(0deg)'};">▼</span>
+                            <span class="chevron-icon" style="color:rgba(255,255,255,0.3); font-size:10px; transition:transform 0.3s; transform:rotate(0deg);">▼</span>
                         </div>
                     </div>
                     
-                    <div id="${safeGroupId}" class="caption-group-content ${isFirst ? '' : 'hidden'}" style="max-height: 250px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,0.03); scrollbar-width: thin;">
+                    <div id="${safeGroupId}" class="caption-group-content hidden" style="max-height: 250px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,0.03); scrollbar-width: thin;">
                         <table style="width:100%; border-collapse:collapse; table-layout: fixed;">
                             <thead>
                                 <tr style="text-align:left; font-size:9px; color:rgba(255,255,255,0.35); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1);">
